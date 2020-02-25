@@ -18,7 +18,7 @@ if __name__ == '__main__':
         with open(str(filename) + '.pkl', 'rb') as f:
             return dill.load(f)
     
-    run = 'all' #specify whether to run 'key' or 'all' (or 'base')
+    run = 'example' #specify whether to run 'all' or 'example' (or 'base'). 'example' is suggested since 'all' will take several hours to run.
     
     nsim = 500
     
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     for j in range(1,21):
         sims.append('sim'+ str(j))
     utility = 'recursive'
-    if run == 'all':
+    if run == 'example':
         rhoE = 0.06; rhoH = 0.03; aE = 0.10; aH = 0.03;  alpha = 0.5;  kappa = 10; zbar = 0.1; lambda_d = 0.015; sigma = 0.06
         delta = 0.025; #to match E[GDP Growth] = 2.0%
         for j in range(1,len(sims)):
@@ -38,7 +38,7 @@ if __name__ == '__main__':
             sims[j].write_files()
             pickle_stuff(sims[j], 'sim'+ str(j) + '.pkl')
     
-    if run == 'key':
+    if run == 'all':
         rhoE = 0.06; rhoH = 0.03; aE = 0.10; aH = 0.03;  alpha = 0.5;  kappa = 10; zbar = 0.1; lambda_d = 0.015; sigma = 0.06
         delta = 0.025; #to match E[GDP Growth] = 2.0%
         gammaE = 1; gammaH = 1; sigma = 0.06; utility = 'recursive'
@@ -143,14 +143,6 @@ if __name__ == '__main__':
         sim11.write_files()
         pickle_stuff(sim11, str('sim11') + '.pkl')
         
-        
-         
-        
-        
-       
-        
-       
-        
     
     #get tables
     vars_ = ['E[theta]', 'E[iota]', 'E[r]', 'E[rp]', 'E[Q]', 'E[sigka]', 'E[mrp]', 'E[mure]', 'Std[iota]', 'Std[rp]','Std[r]', 'Std[mure]',
@@ -247,9 +239,6 @@ if __name__ == '__main__':
     plt.rc('axes',labelsize = 15)
     plt.savefig('../output/plots/trade_off_sd.png')
    
-    
-    
-    
     
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
