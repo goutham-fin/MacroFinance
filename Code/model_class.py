@@ -2,7 +2,7 @@
 """
 Created on Wed Oct  9 16:29:38 2019
 
-@author: gopalakr
+@author: goutham
 """
 
 from scipy.optimize import fsolve
@@ -11,6 +11,7 @@ plt.style.use('seaborn')
 import matplotlib as mpl
 mpl.rcParams['font.family'] = 'serif'
 mpl.rcParams.update({'font.size': 22})
+import matplotlib.pyplot as plt
 import numpy as np
 from finite_difference import hjb_implicit, hjb_explicit, hjb_implicit_upwind, hjb_implicit_policy
 import os
@@ -35,8 +36,8 @@ class  model():
         self.Nz   = 1000; 
         self.Nf = 1
         self.Nz_temp = 0;
-        zz = np.linspace(0.001,0.9,self.Nz)
-        self.z = 3*zz**2  - 2*zz**3; 
+        self.z = np.linspace(0.001,0.999,self.Nz)
+        #self.z = 3*zz**2  - 2*zz**3; 
         self.z_mat = np.tile(self.z,(self.Nf,1)).transpose()
         self.dz  = self.z_mat[1:self.Nz] - self.z_mat[0:self.Nz-1];   
         self.dz2 = self.dz[0:self.Nz-2]**2;
@@ -73,20 +74,20 @@ class  model():
 
     def equations_region1(self, q_p, Psi_p, sig_ka_p, zi, fi):  
         i_p = (q_p -1)/self.kappa
-        eq1 = (self.aE-self.aH)  - \
-                           q_p * self.alpha*(self.Jhzl[zi,fi] - self.Jezl[zi,fi] + 1/(self.z_mat[zi,fi] * (1-self.z_mat[zi,fi])))  * (self.alpha* Psi_p - self.z_mat[zi,fi]) * sig_ka_p**2
+        eq1 = (self.aE-self.aH)/q_p  - \
+                            self.alpha*(self.Jhzl[zi,fi] - self.Jezl[zi,fi] + 1/(self.z_mat[zi,fi] * (1-self.z_mat[zi,fi])))  * (self.alpha* Psi_p - self.z_mat[zi,fi]) * sig_ka_p**2
                     
-        eq2 = (self.z_mat[zi,fi]/self.Je[zi,fi])**(1/self.gammaE) * q_p**(1/self.gammaH)  + \
-                ((1-self.z_mat[zi,fi])/self.Jh[zi,fi]) ** (1/self.gammaH) * q_p**(1/self.gammaE)  - \
+        eq2 = (self.z_mat[zi,fi]/self.Je[zi,fi])**(1/self.gammaE) * q_p**(1/self.gammaE)  + \
+                ((1-self.z_mat[zi,fi])/self.Jh[zi,fi]) ** (1/self.gammaH) * q_p**(1/self.gammaH)  - \
                                                     Psi_p * (self.aE - i_p) - (1- Psi_p) * (self.aH - i_p)
         
-        eq3 = sig_ka_p - self.sigma / (1-((q_p - self.q[zi-1,fi])/(self.dz[zi-1,fi]*q_p) * self.z_mat[zi-1,fi] *(self.alpha* Psi_p/self.z_mat[zi,fi]-1)))
-        
+        eq3 = sig_ka_p*(1-((q_p - self.q[zi-1,fi])/(self.dz[zi-1,fi]*q_p) * self.z_mat[zi-1,fi] *(self.alpha* Psi_p/self.z_mat[zi,fi]-1))) - self.sigma 
+                     
         ER = np.array([eq1, eq2, eq3])
         QN = np.zeros(shape=(3,3))
         
-        QN[0,:] = np.array([-(self.Jhzl[zi,fi] - self.Jezl[zi,fi] + 1/(self.z_mat[zi,fi] * (1-self.z_mat[zi,fi]))) * self.alpha* sig_ka_p**2, \
-                            -2* (self.alpha* Psi_p - self.z_mat[zi,fi]) * (self.Jhzl[zi,fi] - self.Jezl[zi,fi] + 1/(self.z_mat[zi,fi] * (1-self.z_mat[zi,fi]))) * sig_ka_p, \
+        QN[0,:] = np.array([-(self.Jhzl[zi,fi] - self.Jezl[zi,fi] + 1/(self.z_mat[zi,fi] * (1-self.z_mat[zi,fi]))) * self.alpha**2 * sig_ka_p**2, \
+                            -2* self.alpha* (self.alpha* Psi_p - self.z_mat[zi,fi]) * (self.Jhzl[zi,fi] - self.Jezl[zi,fi] + 1/(self.z_mat[zi,fi] * (1-self.z_mat[zi,fi]))) * sig_ka_p, \
                                   -(self.aE - self.aH)/q_p**2])
         QN[1,:] = np.array([self.aH - self.aE, 0, (self.z_mat[zi,fi]/self.Je[zi,fi])**(1/self.gammaE) * q_p**((1-self.gammaE)/self.gammaE) * (1/self.gammaE) + ((1-self.z_mat[zi,fi])/self.Jh[zi,fi])**(1/self.gammaH) * q_p**((1-self.gammaH)/self.gammaH)  * (1/self.gammaH) + 1/self.kappa])
         
@@ -98,18 +99,43 @@ class  model():
         del ER
         del QN
         return EN
+    def equations_region_(self,q_p, Psi_p, sig_ka_p, zi, fi):
+        #simplify when gammaE=gammaH
+        eq1 = np.log(q_p)/self.gammaE + np.log(self.GS[zi,fi]) - np.log(self.aE*Psi_p + self.aH*(1-Psi_p) - (q_p-1)/self.kappa)
+        eq2 = sig_ka_p*(q_p - (q_p - self.q[zi-1,fi])*(self.alpha*Psi_p - self.z_mat[zi,fi])/self.dz[zi-1,fi]) - self.sigma*q_p
+        eq3 = self.aE - self.aH - q_p*self.alpha*(self.alpha*Psi_p - self.z_mat[zi,fi])*sig_ka_p**2* self.JJlp[zi,fi]
+
+        ER = np.array([eq1,eq2,eq3]);
+        
+        QN = np.zeros(shape=(3,3))
+        QN[0,:] = np.array([1/(q_p*self.gammaE) + 1/((self.aE - self.aH)*Psi_p + self.aH - (q_p -1)/self.kappa)/self.kappa,\
+                            -(self.aE - self.aH)/((self.aE - self.aH)*Psi_p + self.aH - (q_p -1)/self.kappa),0])
+        QN[1,:] = np.array([sig_ka_p*(1-(self.alpha * Psi_p - self.z_mat[zi,fi])/self.dz[zi-1,fi]) - self.sigma,\
+                            -sig_ka_p*(q_p - self.q[zi-1,fi])*self.alpha/self.dz[zi-1,fi], \
+                            q_p - (q_p - self.q[zi-1,fi])*(self.alpha*Psi_p - self.z_mat[zi,fi])/self.dz[zi-1,fi]])
+
+        QN[2:] = np.array([-self.alpha*(self.alpha*Psi_p-self.z_mat[zi,fi])*sig_ka_p**2 * self.JJlp[zi,fi],\
+                            -q_p* self.alpha**2*sig_ka_p**2 *self.JJlp[zi,fi], \
+                            -2*q_p*self.alpha*(self.alpha*Psi_p - self.z_mat[zi,fi])*sig_ka_p*self.JJlp[zi,fi]])
+                
+        
+                
+        EN = np.array([q_p,Psi_p,sig_ka_p]) - np.linalg.solve(QN,ER)
+        del ER
+        del QN
+        return [EN[1],EN[2],EN[0]]
 
     def equations_region2(self, q_p, sig_ka_p, zi, fi):
         i_p = (q_p -1)/self.kappa
         
         
-        eq1 = sig_ka_p - self.sigma / (1-((q_p - self.q[zi-1,fi])/(self.dz[zi-1,fi]*q_p) * self.z_mat[zi-1,fi] *(self.alpha/self.z_mat[zi,fi]-1)))
+        eq1 = sig_ka_p - self.sigma / (1-((q_p - self.q[zi-1,fi])/(self.dz[zi-1,fi]*q_p) * self.z_mat[zi-1,fi] *(self.chi[zi,fi]/self.z_mat[zi,fi]-1)))
         
         eq2 = (q_p*self.z_mat[zi,fi]/self.Je[zi,fi])**(1/self.gammaE) + (q_p*(1-self.z_mat[zi,fi])/self.Jh[zi,fi]) ** (1/self.gammaH)   -  (self.aE - i_p)
         ER = np.array([eq1, eq2])
         QN = np.zeros(shape=(2,2))
-        QN[0,:] = np.array([1 - (1- (self.q[zi-1,fi]/q_p)) / self.dz[zi-1,fi] * (self.alpha/self.z_mat[zi,fi] -1) * self.z_mat[zi-1,fi] , \
-                            sig_ka_p * (-self.q[zi-1,fi]/(q_p**2 * self.dz[zi-1,fi]) * (self.alpha/self.z_mat[zi,fi] -1) * self.z_mat[zi-1,fi])])
+        QN[0,:] = np.array([1 - (1- (self.q[zi-1,fi]/q_p)) / self.dz[zi-1,fi] * (self.chi[zi,fi]/self.z_mat[zi,fi] -1) * self.z_mat[zi-1,fi] , \
+                            sig_ka_p * (-self.q[zi-1,fi]/(q_p**2 * self.dz[zi-1,fi]) * (self.chi[zi,fi]/self.z_mat[zi,fi] -1) * self.z_mat[zi-1,fi])])
         QN[1,:] = np.array([0,(self.z_mat[zi,fi]/self.Je[zi,fi])**(1/self.gammaE) * q_p**((1-self.gammaE)/self.gammaE) + ((1-self.z_mat[zi,fi])/self.Jh[zi,fi])**(1/self.gammaH) * q_p**((1-self.gammaH)/self.gammaH) + 1/self.kappa])
         EN = np.array([sig_ka_p,q_p]) - np.linalg.solve(QN,ER)
         return EN
@@ -119,7 +145,7 @@ class  model():
         Psi_q =0
         GS_e = (self.z_mat/self.Je)**(1/self.gammaE)
         GS_h = ((1-self.z_mat)/self.Jh)**(1/self.gammaH)
-        GS = GS_e + GS_h
+        self.GS = GS_e + GS_h
         qL = 0
         qR = self.aH*self.kappa +1
         
@@ -128,7 +154,7 @@ class  model():
             iota = (q-1)/self.kappa
             A0 = self.aH - iota
             
-            if (np.log(q)/self.gammaE + np.log(GS[0])) > np.log(A0):
+            if (np.log(q)/self.gammaE + np.log(self.GS[0])) > np.log(A0):
                 qR = q
             else:
                 qL = q
@@ -155,6 +181,9 @@ class  model():
             self.Jezl  = self.Jez/self.Je ; 
             self.Jezzl = self.Jezz/ self.Je;
             
+            self.JJlp = self.Jhzl - self.Jezl + 1/(self.z_mat*(1-self.z_mat))
+        
+
             # zi=1
             for zi in range(1,self.Nz):
                 if zi==1:
@@ -184,7 +213,9 @@ class  model():
 
             #value function iteration
             self.qz[1:self.Nz,:]  = (self.q [1:self.Nz,:] - self.q [0:self.Nz-1,:])/self.dz_mat; self.qz[0,:]=self.qz[1,:];
-            self.qzz[2:self.Nz,:] = (self.q[2:self.Nz,:] + self.q[0:self.Nz-2,:] - 2.*self.q[1:self.Nz-1,:])/(self.dz2_mat); self.qzz[0,:]=self.qzz[2,:]; self.qzz[1,:]=self.qzz[2,:]; 
+            #self.qzz[2:self.Nz,:] = (self.q[2:self.Nz,:] + self.q[0:self.Nz-2,:] - 2.*self.q[1:self.Nz-1,:])/(self.dz2_mat); self.qzz[0,:]=self.qzz[2,:]; self.qzz[1,:]=self.qzz[2,:]; 
+            self.qzz[2:self.Nz,:] = (self.q[2:self.Nz,:] + self.q[0:self.Nz-2,:] - 2.*self.q[1:self.Nz-1,:])/(self.dz2.reshape(-1,1)); self.qzz[0,:]=self.qzz[2,:]; self.qzz[1,:]=self.qzz[2,:]; 
+            
             self.qzl  = self.qz/self.q ; 
             self.qzzl = self.qzz/ self.q;
 
@@ -204,12 +235,17 @@ class  model():
             self.sig_jha =  self.Jhzl*self.sig_za
             
             self.sig_jea =  self.Jezl*self.sig_za
+            self.priceOfRiskE = -self.sig_jea + self.sig_za/self.z_mat + self.ssq + (self.gammaE-1)*self.sigma
+            self.priceOfRiskH = -self.sig_jha + self.sig_za/(1-self.z_mat) + self.ssq + (self.gammaH-1)*self.sigma
             
-            self.rp_ = self.gammaH*self.thetah*(self.ssq**2) -  (self.sig_jha*self.ssq) 
-            self.rp = self.gammaE*self.theta*(self.ssq**2)- (self.sig_jea*self.ssq) 
+            self.rp = self.priceOfRiskE*self.ssq
+            self.rp_ = self.priceOfRiskE*self.ssq
             self.cw_h = (((1-self.z_mat)*self.q) ** ((1-self.gammaH) / self.gammaH)) / self.Jh**(1/self.gammaH)
             self.cw_e = ((self.z_mat*self.q) ** ((1-self.gammaE) / self.gammaE)) / self.Je**(1/self.gammaE)
-            self.mu_z = self.z_mat*((self.aE-self.iota)/self.q - self.cw_e + (self.theta-1)*self.ssq*(self.rp/self.ssq - self.ssq) + self.ssq*(1-self.alpha)*(self.rp/self.ssq - self.rp_/self.ssq) + (self.lambda_d/self.z_mat)*(self.zbar-self.z_mat))
+            #self.mu_z = self.z_mat*((self.aE-self.iota)/self.q - self.cw_e + (self.theta-1)*self.ssq*(self.rp/self.ssq - self.ssq) + self.ssq*(1-self.alpha)*(self.rp/self.ssq - self.rp_/self.ssq) + (self.lambda_d/self.z_mat)*(self.zbar-self.z_mat))
+            self.mu_z = ((self.aE - self.iota)/self.q - self.cw_e)*self.z_mat + \
+                                self.sig_za*(self.priceOfRiskE - self.ssq) + self.z_mat*self.ssq*(self.priceOfRiskE - self.priceOfRiskH)*(1-self.alpha) + (self.lambda_d)*(self.zbar-self.z_mat)
+            
             #self.mu_z[0,:]=0
             self.mu_jh=  self.Jhzl*self.mu_z + 0.5 *self.Jhzzl * (self.sig_za**2) 
             self.mu_je= self.Jezl*self.mu_z+  0.5 *self.Jezzl * (self.sig_za**2) 
@@ -220,8 +256,11 @@ class  model():
             self.mu_rE = (self.aE - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)
             self.priceOfRiskE = self.rp/self.ssq
             self.priceOfRiskH = self.rp_/self.ssq
-            self.r = self.crisis_flag * (self.mu_rH - self.mu_q - self.sigma * (self.ssq - self.sigma) - self.sigma*(self.priceOfRiskH))  + \
-                    (1-self.crisis_flag) * (self.mu_rE - self.mu_q - self.sigma * (self.ssq - self.sigma) - self.sigma*(self.priceOfRiskE))
+            #self.r = self.crisis_flag * (self.mu_rE - self.sigma * (self.ssq - self.sigma) - self.sigma*(self.priceOfRiskE))  + \
+            #        (1-self.crisis_flag) * (self.mu_rE  - self.sigma * (self.ssq - self.sigma) - self.sigma*(self.priceOfRiskE))
+            self.r = self.mu_rE - self.ssq*self.priceOfRiskE 
+            self.r[self.crisis_z:self.crisis_z+2] = 0.5*(self.r[self.crisis_z+2] + self.r[self.crisis_z-1]) #r is not defined at the kink, so replace with average of neighbours to avoid numerical issues during simulation                     
+            
             #self.r = ((self.aE-self.iota)/self.q + self.Phi   - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)   - self.rp)
             
             
@@ -231,8 +270,8 @@ class  model():
             self.C11 = 0.5*self.sig_za**2
             dt =0.8
             
-            self.Je[:,0] = hjb_implicit_bruSan_policy(self.z,self.Ae,self.mu_z,self.sig_za,0,self.Je,dt).reshape(-1)
-            self.Jh[:,0] = hjb_implicit_bruSan_policy(self.z,self.Ah,self.mu_z,self.sig_za,0,self.Jh,dt).reshape(-1)
+            self.Je[:,0] = hjb_implicit_policy(self.z,self.Ae,self.mu_z,self.sig_za,0,self.Je,dt).reshape(-1)
+            self.Jh[:,0] = hjb_implicit_policy(self.z,self.Ah,self.mu_z,self.sig_za,0,self.Jh,dt).reshape(-1)
         self.aE = self.psi* (self.aE) + (1-self.psi) * (self.aH)
         self.AminusIota = self.psi* (self.aE - self.iota) + (1-self.psi) * (self.aH - self.iota)
         self.A = self.psi*(self.aE) + (1-self.psi) * (self.aH)
@@ -265,7 +304,7 @@ class  model():
                 plt.xlabel('Wealth share (z)')
                 plt.ylabel('r'+labels[i])
                 plt.title(title[i])
-                plt.savefig(plot_path + str(vars[i]).replace('self.','') + '_bruSan.png')
+                plt.savefig(plot_path + str(vars[i]).replace('self.','') + '_benchmark.png')
                 plt.figure()
             plt.figure()
             plt.plot(self.z[10:-20], self.f[10:-20])
@@ -302,11 +341,13 @@ class  model():
         return tv, uv
     
 if __name__ == '__main__':
-    rhoE = 0.06; rhoH = 0.03; aE = 0.11; aH = 0.03;  alpha = 0.5;  kappa = 10; delta = 0.035; zbar = 0.1; lambda_d = 0.015; sigma = 0.06
+    rhoE = 0.06; rhoH = 0.03; aE = 0.11; aH = 0.03;  alpha = 0.5;  kappa = 7; delta = 0.025; zbar = 0.1; lambda_d = 0.0; sigma = 0.06
 
-    gammaE = 2; gammaH = 2; alpha = 0.5
-    mdl = model(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
-    mdl.solve()
-    mdl.plots_()
+    gammaE = 2; gammaH=2; utility = 'crra'
+
+    
+    m = model(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
+    m.solve()
+    m.plots_()
     
     

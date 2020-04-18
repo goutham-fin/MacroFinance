@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import math
 from simulation_benchmark_class_v12 import simulation_benchmark
-from benchmark_bruSan_recursive_class_v4 import benchmark_bruSan_recursive
+from model_recursive_class import model_recursive
+from model_class import model
 import os
 #plt.rcParams['axes.facecolor']='white'
 #plt.rcParams['savefig.facecolor']='white' 
@@ -216,7 +217,7 @@ if __name__ == '__main__':
             plt.rc('legend', fontsize=12) 
             plt.rc('axes',labelsize = 15)
             #plt.rc('figure', titlesize=50)
-            plt.savefig(plot_path + str(vars_list[i]) + '_bruSan.png')
+            plt.savefig(plot_path + str(vars_list[i]) + '_benchmark.png')
             plt.figure()
         
         plt.figure()

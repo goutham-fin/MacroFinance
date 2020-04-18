@@ -1,15 +1,5 @@
-#implements quarterly simulation for bruSan model
-#included the capital process simulation k_sim
-#made bk as self.bk and imported stationary distribution (kfe) as well
-#added k_trim_ann
-#fixes return calculation by computing returns separately for each simulation
-#fixed replace(-1,self.nsim) from replace(self.nsim,-1).transpose(). Be VERY careful with replace function. 
-#fixes z_trim_ann. be VERY VERY careful with reshape. 
-#fixed capital process 
-#fixed expected return process by considering d(qk)/qk instead of dq/q
-from benchmark_class_v1 import benchmarkModel
-from benchmark_bruSan_class_v4 import benchmark_bruSan
-from benchmark_bruSan_recursive_class_v4 import benchmark_bruSan_recursive
+from model_class import model
+from model_recursive_class import model_recursive
 from scipy.interpolate import interp1d
 from scipy.optimize import fsolve
 from pylab import plt
@@ -45,7 +35,7 @@ class simulation_benchmark():
         
         
         if self.utility == 'recursive':
-            self.bk = benchmark_bruSan_recursive(self.rhoE, self.rhoH, self.aE, self.aH, self.sigma, self.alpha, self.gammaE, self.gammaH, self.kappa, self.delta, self.lambda_d, self.zbar)
+            self.bk = model_recursive(self.rhoE, self.rhoH, self.aE, self.aH, self.sigma, self.alpha, self.gammaE, self.gammaH, self.kappa, self.delta, self.lambda_d, self.zbar)
             self.bk.solve()          
             self.z, self.crisis_z, self.mu_z, self.sig_za, self.sig_ka, self.iota, self.theta, self.thetah, self.rp, self.rp_, self.r, self.Q, self.rho, self.rho_, self.Phi, self.lambda_k, self.s_a = self.bk.z, self.bk.thresholdIndex, self.bk.mu_z, self.bk.sig_za, self.bk.ssq, self.bk.iota, \
                                                                self.bk.theta, self.bk.thetah, self.bk.rp, self.bk.rp_, self.bk.r, self.bk.q, self.bk.rhoE, self.bk.rhoH, self.bk.Phi, self.bk.delta, self.bk.sigma
@@ -58,7 +48,7 @@ class simulation_benchmark():
             self.psi = self.bk.psi
             self.f_norm = self.bk.f_norm
         elif self.utility == 'crra':
-            self.bk = benchmark_bruSan(self.rhoE, self.rhoH, self.aE, self.aH, self.sigma, self.alpha, self.gammaE, self.gammaH, self.kappa, self.delta, self.lambda_d, self.zbar)
+            self.bk = model(self.rhoE, self.rhoH, self.aE, self.aH, self.sigma, self.alpha, self.gammaE, self.gammaH, self.kappa, self.delta, self.lambda_d, self.zbar)
             self.bk.solve()
             self.z, self.crisis_z, self.mu_z, self.sig_za, self.sig_ka, self.iota, self.theta, self.thetah, self.rp, self.rp_, self.r, self.Q, self.rho, self.rho_, self.Phi, self.lambda_k, self.s_a = self.bk.z, self.bk.crisis_z, self.bk.mu_z, self.bk.sig_za, self.bk.ssq, self.bk.iota, \
                                                                 self.bk.theta, self.bk.thetah, self.bk.rp, self.bk.rp_, self.bk.r, self.bk.q, self.bk.rhoE, self.bk.rhoH, self.bk.Phi, self.bk.delta, self.bk.sigma
@@ -348,9 +338,9 @@ if __name__ == '__main__':
     print(sim1.stats)
     
     
-    bruSan_recursive_sim1 = sim1
+    
     plt.figure()
-    plt.bar(np.arange(1,50),bruSan_recursive_sim1.tstat1)
+    plt.bar(np.arange(1,50),sim1.tstat1)
     plt.xlabel('lags (months)', fontsize=15)
     plt.ylabel(r'$\beta_{1,model}(h): t-stat$',fontsize=15)
     plt.ylim(-5,5)
@@ -362,7 +352,7 @@ if __name__ == '__main__':
     plt.show()
     
     plt.figure()
-    plt.bar(np.arange(1,50),np.array(bruSan_recursive_sim1.tstat1) +np.array(bruSan_recursive_sim1.tstat2))
+    plt.bar(np.arange(1,50),np.array(sim1.tstat1) +np.array(sim1.tstat2))
     plt.xlabel('lags (months)',fontsize=15)
     plt.ylabel(r'$\beta_{1,model}(h) + \beta_{2,model}(h): t-stat$',fontsize=15)
     plt.ylim(-5,5)
@@ -373,7 +363,7 @@ if __name__ == '__main__':
     plt.savefig('../output/plots/acf2_model.png')
     plt.show()
     
-    print(bruSan_recursive_sim1.crisis_length_mean)
+    print(sim1.crisis_length_mean)
     
     plt.figure()
     #plot_acf(sim1.Q_freq_fn_all[:,0])

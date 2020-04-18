@@ -5,33 +5,34 @@ from scipy.optimize import fsolve
 #switched r to r1
 import numpy as np
 
-from finite_difference import hjb_implicit_bruSan_upwind
-from staticStepAllocation import staticStepAllocationInnerPsi
+from finite_difference import hjb_implicit_upwind
 import matplotlib.pyplot as plt
 from scipy import optimize
 from scipy.interpolate import interp1d
 
-class benchmark_bruSan_recursive():
+class model_recursive():
     def __init__(self, rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar):
         
         self.rhoE = rhoE # discount rate of experts
         self.rhoH = rhoH; # discount rate of households
         self.aE = aE # productivity of experts 
         self.aH = aH # productivity of households
-        self.sigma = sigma # aggregate risk
-        self.alpha = alpha # skin in the game
-        self.gammaE = gammaE # relative risk aversion of experts
-        self.gammaH = gammaH # relative risk aversion of households [before choosing ~= gammaE, correct line 105 first!]
+        self.sigma = sigma # exogenous volatility
+        self.alpha = alpha # skin in the game constraint
+        self.gammaE = gammaE #  risk aversion of experts
+        self.gammaH = gammaH #  risk aversion of households 
         self.kappa = kappa # capital adjustment cost parameter
         self.delta = delta # depreciation rate
-        self.etabar = zbar;
-        self.lambda_d = lambda_d;
+        self.etabar = zbar; # population share of experts
+        self.lambda_d = lambda_d; # death rate
+        
         # algorithm parameters
-        self.continueOldIteration = 'False'; #if true, does not reset initial guesses
-        self.maxIterations = 400; #always stop after this many iterations
-        self.convergenceCriterion = 1e-6; #stop earlier, if relative change is smaller than this
+        self.continueOldIteration = 'False'; 
+        self.maxIterations = 400; 
+        self.convergenceCriterion = 1e-6; 
         self.dt = 0.4; #time step width
         self.converged = 'False'
+
         self.Nf = 1
         self.grid_method = 'uniform' #specify 'uniform' or 'non-uniform'
         ## state grid
@@ -54,7 +55,7 @@ class benchmark_bruSan_recursive():
         self.dz_mat = np.tile(self.dz,(self.Nf,1))
 
         ## initial guesses [terminal conditions]
-        # terminal conditions for value functions and q [can choose anything "reasonable" here]
+        
         self.Je = self.aE**(-self.gammaE)*self.z**(1-self.gammaE); # v of experts
         self.Jh = self.aE**(-self.gammaH)*(1-self.z)**(1-self.gammaH); # v of households
         self.q = np.ones([self.Nz,1]);
@@ -69,7 +70,7 @@ class benchmark_bruSan_recursive():
         self.dq = np.full([self.Nz,1],np.NaN)
     
     
-    def equations_region1(self, q_p, Psi_p, sig_ka_p, zi):   
+    def equations_region1(self, q_p, Psi_p, sig_ka_p, zi):    #crisis region
         dz  = self.z[1:self.Nz] - self.z[0:self.Nz-1];  
         i_p = (q_p -1)/self.kappa
         eq1 = (self.aE-self.aH)/q_p  - \
@@ -100,7 +101,7 @@ class benchmark_bruSan_recursive():
         
         ## main iteration
         
-        # fix variables at z = zMin [know them explicitly under assumption psi=0]
+        # initialize variables at eta=0
         self.psi[0] = 0;
         self.q[0] = (1 + self.kappa*(self.aH + self.psi[0]*(self.aE-self.aH)))/(1 + self.kappa*(self.rhoH + self.z[0] * (self.rhoE - self.rhoH)));
         self.chi[0] = 0;
@@ -114,12 +115,11 @@ class benchmark_bruSan_recursive():
             self.logValueH = np.log(self.Jh);
             self.dLogJe = np.hstack([(self.logValueE[1]-self.logValueE[0])/(self.z[1]-self.z[0]),(self.logValueE[2:]-self.logValueE[0:-2])/(self.z[2:]-self.z[0:-2]),(self.logValueE[-1]-self.logValueE[-2])/(self.z[-1]-self.z[-2])]);
             self.dLogJh = np.hstack([(self.logValueH[1]-self.logValueH[0])/(self.z[1]-self.z[0]),(self.logValueH[2:]-self.logValueH[0:-2])/(self.z[2:]-self.z[0:-2]),(self.logValueH[-1]-self.logValueH[-2])/(self.z[-1]-self.z[-2])]);
-          	# (2) static step solve for q, psi, chi and ssq:=(sigma + sigma^q)
-            # (a)compute static allocation for z region in which psi < 1
+          	
             for i in range(1,self.Nz):
-                  # (start at i=2, because initial value at z(1) has already been set outside the loop)
+                  
                   if self.psi[i-1] >= 1:
-                	      break; #if we have reached boundary of psi<=1, have to continue differently...
+                	      break; #break out if normal regime is reached
             	    
                   result= self.equations_region1(self.q[i-1][0], self.psi[i-1][0], self.ssq[i-1][0], i)
                   self.psi[i], self.ssq[i], self.q[i] =result[0], result[1], result[2]
@@ -133,8 +133,8 @@ class benchmark_bruSan_recursive():
               
             self.psi[self.thresholdIndex:] = 1;
             self.q[self.thresholdIndex:] = (1 + self.kappa*(self.aH + self.psi[self.thresholdIndex:]*(self.aE-self.aH))).reshape(-1,1)/(1 + self.kappa*(self.rhoH + self.z[self.thresholdIndex:]*(self.rhoE-self.rhoH))).reshape(-1,1);
-            self.chi[self.thresholdIndex:] = np.maximum(self.z[self.thresholdIndex:],self.alpha).reshape(-1,1); #NOTE: this seems incorrect for gammaE~=gammaH!
-            #self.iota[self.thresholdIndex:] = 1 + self.kappa* self.q[self.thresholdIndex:];
+            self.chi[self.thresholdIndex:] = np.maximum(self.z[self.thresholdIndex:],self.alpha).reshape(-1,1); 
+            
             self.iota[self.thresholdIndex:] = (self.q[self.thresholdIndex:]-1)/self.kappa
             if self.thresholdIndex==0:
                 self.dq[self.thresholdIndex:-1] = (self.q[1:] - np.vstack([self.q0,self.q[0:-2]])) / (self.z - np.vstack([0,self.z[:-2]])) #needs fixing
@@ -162,29 +162,21 @@ class benchmark_bruSan_recursive():
             self.sig_jh = self.dLogJh.reshape(-1,1) * (self.sig_za.reshape(-1,1))
             self.rp = self.priceOfRiskE * self.ssq
             self.rp_ = self.priceOfRiskH * self.ssq
-            #self.priceOfRiskE = self.psi/self.z.reshape(-1,1) * self.ssq* self.gammaE - (1-self.gammaE)* self.sig_je
-            #self.priceOfRiskH = (1-self.psi)/(1-self.z.reshape(-1,1)) * self.ssq * self.gammaH - (1-self.gammaH)* self.sig_jh
-            #self.mu_z = ((1-self.z.reshape(-1,1)) * self.priceOfRiskE + self.z.reshape(-1,1) * self.priceOfRiskH.reshape(-1,1) - \
-            #                 (1-2*self.z.reshape(-1,1))*self.ssq) * self.sig_za - (self.consWealthRatioE - self.consWealthRatioH)*(1 - self.z.reshape(-1,1))*self.z.reshape(-1,1) + self.lambda_d * (self.etabar - self.z.reshape(-1,1));
+            
             self.mu_z = self.z_mat*((self.aE-self.iota)/self.q - self.consWealthRatioE + (self.theta-1)*self.ssq*(self.rp/self.ssq - self.ssq) + self.ssq*(1-self.alpha)*(self.rp/self.ssq - self.rp_/self.ssq) + (self.lambda_d/self.z_mat)*(self.etabar-self.z_mat))
             
             self.growthRate = np.log(self.q)/self.kappa-self.delta;
             self.sig_za[0] = 0; 
-            #self.sig_za[-1] = 0; #adjust diffusion terms at boundaries, because boundary conditions are unknown
             self.mu_z[0] = np.maximum(self.mu_z[0],0); 
-            self.mu_z[-1] = np.minimum(self.mu_z[-1],0); #make sure drifts at boundaries point inward
+            self.mu_z[-1] = np.minimum(self.mu_z[-1],0); 
             
             
             self.Phi = (np.log(self.q))/self.kappa
             self.mu_q = self.qzl * self.mu_z + 0.5*self.qzzl*self.sig_za**2 
             self.mu_rH = (self.aH - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)
             self.mu_rE = (self.aE - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)
-            #self.r = self.crisis_flag * (self.mu_rH  - self.ssq * self.priceOfRiskH) + \
-            #         (1-self.crisis_flag) * (self.mu_rE  - self.ssq * self.priceOfRiskE)
             self.r = self.mu_rE - self.ssq*self.priceOfRiskE 
             self.r[self.thresholdIndex:self.thresholdIndex+2] = 0.5*(self.r[self.thresholdIndex+2] + self.r[self.thresholdIndex-1]) #r is not defined at the kink, so replace with average of neighbours to avoid numerical issues during simulation                     
-            #self.r = ((self.mu_rE.reshape(-1,1) * self.z.reshape(-1,1))/(self.gammaE*self.ssq.reshape(-1,1)) + (1-self.gammaE/self.gammaE) * self.sig_je.reshape(-1,1)/self.ssq.reshape(-1,1) * self.z.reshape(-1,1) + \
-            #            self.mu_rH.reshape(-1,1) * (1-self.z.reshape(-1,1))/(self.gammaH * self.ssq.reshape(-1,1)) + (1-self.gammaH)/self.gammaH * (self.sig_jh.reshape(-1,1)/self.ssq.reshape(-1,1)) * (1-self.z.reshape(-1,1)) - 1) * (1/(self.z.reshape(-1,1)/(self.gammaE*self.ssq.reshape(-1,1)) + ((1-self.z.reshape(-1,1))/(self.gammaH*self.ssq))))
             
             #fix numerical issues
             if self.grid_method =='non-uniform':
@@ -208,24 +200,24 @@ class benchmark_bruSan_recursive():
                 self.rp[0] = self.rp[1]; 
                 self.rp_[0] = self.rp_[1];
             # PDE time steps
-            # (a) common terms in both PDEs
+            
             diffusion = self.sig_za**2/2;
-            # (b) experts
+            
             advection = self.mu_z + (1-self.gammaE)*self.sigma*self.sig_za;
             linearTerm = (1-self.gammaE)*(self.growthRate.reshape(-1,1) + self.rhoE*(np.log(self.rhoE)+np.log(self.z.reshape(-1,1)*self.q)) - self.gammaE/2*self.sigma**2) - np.log(self.Je.reshape(-1,1)); #PDE coefficient multiplying v(\z)
-            # solve PDE
-            newValueAux = hjb_implicit_bruSan_upwind(np.vstack([0,self.z.reshape(-1,1),1]),np.vstack([np.NaN,self.Je.reshape(-1,1),np.NaN]),self.dt, \
+            # solving PDE using implicit scheme
+            newValueAux = hjb_implicit_upwind(np.vstack([0,self.z.reshape(-1,1),1]),np.vstack([np.NaN,self.Je.reshape(-1,1),np.NaN]),self.dt, \
                                                         np.vstack([0,diffusion,0]),np.vstack([0,advection,0]),np.vstack([0,linearTerm,0]),np.vstack([0,np.zeros([self.z.shape[0],1]),0]), 0, 0); #add fake grid extensions, because solver ignores boundary coefficients
-            newJe = newValueAux[1:-1]; #get rid of undefined values beyond boundaries
+            newJe = newValueAux[1:-1]; 
             # (c) households
             advection = self.mu_z + (1-self.gammaH)*self.sigma*self.sig_za;
             linearTerm = (1-self.gammaH)*(self.growthRate.reshape(-1,1) + self.rhoH*(np.log(self.rhoH)+np.log((1-self.z.reshape(-1,1))*self.q)) - self.gammaH/2*self.sigma**2) - np.log(self.Jh.reshape(-1,1)); #PDE coefficient multiplying v(\z)
-            # solve PDE
-            newValueAux = hjb_implicit_bruSan_upwind(np.vstack([0,self.z.reshape(-1,1),1]),np.vstack([np.NaN,self.Jh.reshape(-1,1),np.NaN]),self.dt, \
+            # solving PDE using implicit scheme
+            newValueAux = hjb_implicit_upwind(np.vstack([0,self.z.reshape(-1,1),1]),np.vstack([np.NaN,self.Jh.reshape(-1,1),np.NaN]),self.dt, \
                                                          np.vstack([0,diffusion,0]),np.vstack([0,advection,0]),np.vstack([0,linearTerm,0]),np.vstack([0,np.zeros([self.z.shape[0],1]),0]),0,0); #add fake grid extensions, because solver ignores boundary coefficients
-            newJh = newValueAux[1:-1]; #get rid of undefined values beyond boundaries
+            newJh = newValueAux[1:-1]; 
                   
-            # (4) check convergence
+            # checkign convergence
             relChangeJe = np.abs(newJe-self.Je) / (np.abs(newJe)+np.abs(self.Je))*2/self.dt;
             relChangeJh = np.abs(newJh-self.Jh) / (np.abs(newJh)+np.abs(self.Jh))*2/self.dt;
             self.Je = newJe;
@@ -241,7 +233,7 @@ class benchmark_bruSan_recursive():
             print('Algortihm converged after {} time steps.\n'.format(timeStep));
         else:
             print('Algorithm terminated without convergence after {} time steps.'.format(timeStep));
-        #self.ssq[0], self.ssq[1] = self.ssq[2],self.ssq[2] 
+        
         self.kfe()
         
     def kfe(self):
@@ -275,20 +267,8 @@ if __name__ == '__main__':
     #rhoE = 0.06; rhoH = 0.03; aE = 0.11; aH = 0.03;  alpha = 1.0;  kappa = 5; delta = 0.035; zbar = 0.1; lambda_d = 0.015; sigma = 0.06
     rhoE = 0.06; rhoH = 0.04; lambda_d = 0.01; sigma = 0.06; kappa = 10; delta = 0.03; zbar = 0.1; aE = 0.11; aH = 0.03; alpha=0.5;
     gammaE = 1; gammaH = 1; 
-    sim1 = benchmark_bruSan_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
+    sim1 = model_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
     sim1.solve()  
-    #plt.plot(bruSan_recursive.z,bruSan_recursive.mu_z)
-    #plt.figure()
-    
-    lambda_d = 0.05; zbar = 0.1
-    sim2 = benchmark_bruSan_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
-    sim2.solve()  
-    
-        
-    lambda_d = 0.01; zbar = 0.5
-    sim3 = benchmark_bruSan_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
-    sim3.solve()  
-    
     
     plt.plot(sim1.z[10:],sim1.mu_z[10:],label = '$\lambda_d = 0.01$')
     plt.legend(loc=0,fontsize = 15)
