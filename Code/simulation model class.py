@@ -7,7 +7,7 @@ plt.style.use('seaborn')
 import matplotlib as mpl
 mpl.rcParams['font.family'] = 'serif'
 mpl.rcParams.update({'font.size': 22})
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -337,8 +337,6 @@ if __name__ == '__main__':
     sim1.write_files()
     print(sim1.stats)
     
-    
-    
     plt.figure()
     plt.bar(np.arange(1,50),sim1.tstat1)
     plt.xlabel('lags (months)', fontsize=15)
@@ -365,8 +363,6 @@ if __name__ == '__main__':
     
     print(sim1.crisis_length_mean)
     
-    plt.figure()
-    #plot_acf(sim1.Q_freq_fn_all[:,0])
     
     
     
