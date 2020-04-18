@@ -1,13 +1,17 @@
 from scipy.optimize import fsolve
 
+#import matplotlibpyplot as plt
+#USES LINEAR z Grid and allows for different gamma values
+#switched r to r1
 import numpy as np
 
-from finite_difference import hjb_implicit_upwind
+from finite_difference import hjb_implicit_bruSan_upwind
+from staticStepAllocation import staticStepAllocationInnerPsi
 import matplotlib.pyplot as plt
 from scipy import optimize
 from scipy.interpolate import interp1d
 
-class model_recursive():
+class benchmark_bruSan_recursive():
     def __init__(self, rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar):
         
         self.rhoE = rhoE # discount rate of experts
@@ -73,12 +77,11 @@ class model_recursive():
                     
         eq2 = (self.rhoE*self.z[zi] + self.rhoH*(1-self.z[zi])) * q_p  - Psi_p * (self.aE - i_p) - (1- Psi_p) * (self.aH - i_p)
         
-        eq3 = sig_ka_p - self.sigma / (1-((q_p - self.q[zi-1][0])/(dz[zi-1]*q_p) * self.z[zi-1] *(self.alpha* Psi_p/self.z[zi]-1)))
-        
+        eq3 = sig_ka_p*(1-((q_p - self.q[zi-1][0])/(dz[zi-1]*q_p) * self.z[zi-1] *(self.alpha* Psi_p/self.z[zi]-1)))  - self.sigma 
         ER = np.array([eq1, eq2, eq3])
         QN = np.zeros(shape=(3,3))
-        QN[0,:] = np.array([-self.alpha* (self.dLogJh[zi] - self.dLogJe[zi] + 1/(self.z[zi] * (1-self.z[zi]))) * sig_ka_p**2, \
-                            -2*(self.alpha * Psi_p - self.z[zi]) * (self.dLogJh[zi] - self.dLogJe[zi] + 1/(self.z[zi] * (1-self.z[zi]))) * sig_ka_p + (self.gammaH - self.gammaE) * self.sigma, \
+        QN[0,:] = np.array([-self.alpha**2 * (self.dLogJh[zi] - self.dLogJe[zi] + 1/(self.z[zi] * (1-self.z[zi]))) * sig_ka_p**2, \
+                            -2*self.alpha*(self.alpha * Psi_p - self.z[zi]) * (self.dLogJh[zi] - self.dLogJe[zi] + 1/(self.z[zi] * (1-self.z[zi]))) * sig_ka_p + (self.gammaH - self.gammaE) * self.sigma, \
                                   -(self.aE - self.aH)/q_p**2])
         QN[1,:] = np.array([self.aH - self.aE, 0, self.z[zi]* self.rhoE + (1-self.z[zi])* self.rhoH + 1/self.kappa])
         
@@ -138,8 +141,8 @@ class model_recursive():
             else:
                 self.dq[self.thresholdIndex:] = (self.q[self.thresholdIndex:]- self.q[self.thresholdIndex-1:-1]).reshape(-1,1)/(self.z[self.thresholdIndex:]-self.z[self.thresholdIndex-1:-1]).reshape(-1,1);
             self.ssq[self.thresholdIndex:] = self.sigma/(1-self.dq[self.thresholdIndex:]/self.q[self.thresholdIndex:] * (self.chi[self.thresholdIndex:]-self.z[self.thresholdIndex:].reshape(-1,1)));
-            self.theta = self.psi/self.z.reshape(-1,1)
-            self.thetah = (1-self.psi)/(1-self.z.reshape(-1,1))
+            self.theta = (self.chi)/self.z.reshape(-1,1)
+            self.thetah = (1-self.chi)/(1-self.z.reshape(-1,1))
             self.theta[0] = self.theta[1]
             self.thetah[0] = self.thetah[1]
             self.Phi = (np.log(self.q))/self.kappa
@@ -157,27 +160,32 @@ class model_recursive():
             self.priceOfRiskH = -(1/(1-self.z.reshape(-1,1)) + self.dLogJh.reshape(-1,1))*self.sig_za + self.ssq + (self.gammaH-1) * self.sigma;
             self.sig_je = self.dLogJe.reshape(-1,1) * (self.sig_za.reshape(-1,1))
             self.sig_jh = self.dLogJh.reshape(-1,1) * (self.sig_za.reshape(-1,1))
+            self.rp = self.priceOfRiskE * self.ssq
+            self.rp_ = self.priceOfRiskH * self.ssq
             #self.priceOfRiskE = self.psi/self.z.reshape(-1,1) * self.ssq* self.gammaE - (1-self.gammaE)* self.sig_je
             #self.priceOfRiskH = (1-self.psi)/(1-self.z.reshape(-1,1)) * self.ssq * self.gammaH - (1-self.gammaH)* self.sig_jh
-            self.mu_z = ((1-self.z.reshape(-1,1)) * self.priceOfRiskE + self.z.reshape(-1,1) * self.priceOfRiskH.reshape(-1,1) - \
-                             (1-2*self.z.reshape(-1,1))*self.ssq) * self.sig_za - (self.consWealthRatioE - self.consWealthRatioH)*(1 - self.z.reshape(-1,1))*self.z.reshape(-1,1) + self.lambda_d * (self.etabar - self.z.reshape(-1,1));
+            #self.mu_z = ((1-self.z.reshape(-1,1)) * self.priceOfRiskE + self.z.reshape(-1,1) * self.priceOfRiskH.reshape(-1,1) - \
+            #                 (1-2*self.z.reshape(-1,1))*self.ssq) * self.sig_za - (self.consWealthRatioE - self.consWealthRatioH)*(1 - self.z.reshape(-1,1))*self.z.reshape(-1,1) + self.lambda_d * (self.etabar - self.z.reshape(-1,1));
+            self.mu_z = self.z_mat*((self.aE-self.iota)/self.q - self.consWealthRatioE + (self.theta-1)*self.ssq*(self.rp/self.ssq - self.ssq) + self.ssq*(1-self.alpha)*(self.rp/self.ssq - self.rp_/self.ssq) + (self.lambda_d/self.z_mat)*(self.etabar-self.z_mat))
+            
             self.growthRate = np.log(self.q)/self.kappa-self.delta;
             self.sig_za[0] = 0; 
             #self.sig_za[-1] = 0; #adjust diffusion terms at boundaries, because boundary conditions are unknown
             self.mu_z[0] = np.maximum(self.mu_z[0],0); 
             self.mu_z[-1] = np.minimum(self.mu_z[-1],0); #make sure drifts at boundaries point inward
-            self.rp = self.priceOfRiskE * self.ssq
-            self.rp_ = self.priceOfRiskH * self.ssq
+            
             
             self.Phi = (np.log(self.q))/self.kappa
             self.mu_q = self.qzl * self.mu_z + 0.5*self.qzzl*self.sig_za**2 
             self.mu_rH = (self.aH - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)
             self.mu_rE = (self.aE - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)
-            self.r = self.crisis_flag * (self.mu_rH  -self.mu_q - self.sigma * (self.ssq - self.sigma) - self.ssq * self.priceOfRiskH) + \
-                     (1-self.crisis_flag) * (self.mu_rE -self.mu_q - self.sigma * (self.ssq - self.sigma) - self.ssq * self.priceOfRiskE)
+            #self.r = self.crisis_flag * (self.mu_rH  - self.ssq * self.priceOfRiskH) + \
+            #         (1-self.crisis_flag) * (self.mu_rE  - self.ssq * self.priceOfRiskE)
+            self.r = self.mu_rE - self.ssq*self.priceOfRiskE 
+            self.r[self.thresholdIndex:self.thresholdIndex+2] = 0.5*(self.r[self.thresholdIndex+2] + self.r[self.thresholdIndex-1]) #r is not defined at the kink, so replace with average of neighbours to avoid numerical issues during simulation                     
             #self.r = ((self.mu_rE.reshape(-1,1) * self.z.reshape(-1,1))/(self.gammaE*self.ssq.reshape(-1,1)) + (1-self.gammaE/self.gammaE) * self.sig_je.reshape(-1,1)/self.ssq.reshape(-1,1) * self.z.reshape(-1,1) + \
             #            self.mu_rH.reshape(-1,1) * (1-self.z.reshape(-1,1))/(self.gammaH * self.ssq.reshape(-1,1)) + (1-self.gammaH)/self.gammaH * (self.sig_jh.reshape(-1,1)/self.ssq.reshape(-1,1)) * (1-self.z.reshape(-1,1)) - 1) * (1/(self.z.reshape(-1,1)/(self.gammaE*self.ssq.reshape(-1,1)) + ((1-self.z.reshape(-1,1))/(self.gammaH*self.ssq))))
-            self.r1 = ((self.aE-self.iota)/self.q + self.Phi   - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)   - self.rp)
+            
             #fix numerical issues
             if self.grid_method =='non-uniform':
                 self.r[0:10] = self.r[10];     
@@ -190,11 +198,10 @@ class model_recursive():
                 self.rp[0:10] = self.rp[10]; 
                 self.rp_[0:10] = self.rp_[10]; 
             else:
-                self.r[0:3] = self.r[3]; 
-                self.r1[0:3] = self.r1[3];
-                self.mu_q[0] = self.mu_q[1];  
-                self.mu_rH[0] = self.mu_rH[1]; 
-                self.mu_rE[0] = self.mu_rE[1];    
+                self.r[0:10] = self.r[10]; 
+                self.mu_q[0:10] = self.mu_q[10];  
+                self.mu_rH[0:10] = self.mu_rH[10]; 
+                self.mu_rE[0:10] = self.mu_rE[10];    
                 self.priceOfRiskE[0] = self.priceOfRiskE[1]; 
                 self.priceOfRiskH[0] = self.priceOfRiskH[1]; 
                 self.ssq[0] = self.ssq[1]; 
@@ -237,7 +244,7 @@ class model_recursive():
         #self.ssq[0], self.ssq[1] = self.ssq[2],self.ssq[2] 
         self.kfe()
         
-    def kfe(self): #kolmogorov forward equation
+    def kfe(self):
         self.coeff = 2*self.mu_z[1:-1]/(self.sig_za[1:-1]**2)
         self.coeff_fn = interp1d(self.z[1:-1],self.coeff.reshape(-1),kind='nearest',fill_value='extrapolate')
         Nh = 10000
@@ -266,22 +273,44 @@ class model_recursive():
 
 if __name__ == '__main__':
     #rhoE = 0.06; rhoH = 0.03; aE = 0.11; aH = 0.03;  alpha = 1.0;  kappa = 5; delta = 0.035; zbar = 0.1; lambda_d = 0.015; sigma = 0.06
-    rhoE = 0.06; rhoH = 0.04; lambda_d = 0.01; sigma = 0.06; kappa = 10; delta = 0.03; zbar = 0.1; aE = 0.11; aH = 0.03; alpha=1.0;
+    rhoE = 0.06; rhoH = 0.04; lambda_d = 0.01; sigma = 0.06; kappa = 10; delta = 0.03; zbar = 0.1; aE = 0.11; aH = 0.03; alpha=0.5;
     gammaE = 1; gammaH = 1; 
-    mdl_recursive = model_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
-    mdl_recursive.solve()  
+    sim1 = benchmark_bruSan_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
+    sim1.solve()  
+    #plt.plot(bruSan_recursive.z,bruSan_recursive.mu_z)
+    #plt.figure()
     
-    plt.plot(mdl_recursive.z,mdl_recursive.rp)
-    plt.plot(mdl_recursive.z,mdl_recursive.rp)
-    
-    plt.figure()
-    plt.plot(mdl_recursive.z, mdl_recursive.f)
-    plt.figure()
-    plt.plot(mdl_recursive.z, mdl_recursive.rp)
-    
-    plt.figure()
-    plt.plot(mdl_recursive.z, mdl_recursive.r)
+    lambda_d = 0.05; zbar = 0.1
+    sim2 = benchmark_bruSan_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
+    sim2.solve()  
     
         
-                
-                    	
+    lambda_d = 0.01; zbar = 0.5
+    sim3 = benchmark_bruSan_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
+    sim3.solve()  
+    
+    
+    plt.plot(sim1.z[10:],sim1.mu_z[10:],label = '$\lambda_d = 0.01$')
+    plt.legend(loc=0,fontsize = 15)
+    plt.plot(sim2.z[10:],sim2.mu_z[10:],label = '$\lambda_d = 0.05$')
+    plt.legend(loc=0,fontsize = 15)
+    plt.axis('tight')
+    plt.ylabel('$\mu_z$')
+    plt.xlabel('$z$')
+    plt.title('Drift of wealth share',fontsize = 20)
+    plt.rc('legend', fontsize=12) 
+    plt.rc('axes',labelsize = 15)
+    plt.savefig('../output/plots/drift_lambdad.png')
+    
+    plt.figure()
+    plt.plot(sim1.z[10:],sim1.mu_z[10:],label = '$\overline{z} = 0.1$')
+    plt.legend(loc=0,fontsize = 15)
+    plt.plot(sim3.z[10:],sim3.mu_z[10:],label = '$\overline{z} = 0.5$')
+    plt.legend(loc=0,fontsize = 15)
+    plt.axis('tight')
+    plt.ylabel('$\mu_z$')
+    plt.xlabel('$z$')
+    plt.title('Drift of wealth share',fontsize = 20)
+    plt.rc('legend', fontsize=12) 
+    plt.rc('axes',labelsize = 15)            
+    plt.savefig('../output/plots/drift_z.png')                    	

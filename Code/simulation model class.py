@@ -1,5 +1,15 @@
-from benchmark_bruSan_class import benchmark_bruSan
-from benchmark_bruSan_recursive_class import benchmark_bruSan_recursive
+#implements quarterly simulation for bruSan model
+#included the capital process simulation k_sim
+#made bk as self.bk and imported stationary distribution (kfe) as well
+#added k_trim_ann
+#fixes return calculation by computing returns separately for each simulation
+#fixed replace(-1,self.nsim) from replace(self.nsim,-1).transpose(). Be VERY careful with replace function. 
+#fixes z_trim_ann. be VERY VERY careful with reshape. 
+#fixed capital process 
+#fixed expected return process by considering d(qk)/qk instead of dq/q
+from benchmark_class_v1 import benchmarkModel
+from benchmark_bruSan_class_v4 import benchmark_bruSan
+from benchmark_bruSan_recursive_class_v4 import benchmark_bruSan_recursive
 from scipy.interpolate import interp1d
 from scipy.optimize import fsolve
 from pylab import plt
@@ -20,6 +30,7 @@ from statsmodels.api import add_constant
 from statsmodels.iolib.summary2 import summary_col
 import statistics
 from itertools import groupby
+from statsmodels.graphics.tsaplots import plot_acf
 
 class simulation_benchmark():
     def __init__(self, rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar, utility, nsim):
@@ -44,6 +55,8 @@ class simulation_benchmark():
             self.f = self.bk.f
             self.mu_rh = self.bk.mu_rH
             self.mu_re = self.bk.mu_rE
+            self.psi = self.bk.psi
+            self.f_norm = self.bk.f_norm
         elif self.utility == 'crra':
             self.bk = benchmark_bruSan(self.rhoE, self.rhoH, self.aE, self.aH, self.sigma, self.alpha, self.gammaE, self.gammaH, self.kappa, self.delta, self.lambda_d, self.zbar)
             self.bk.solve()
@@ -55,6 +68,8 @@ class simulation_benchmark():
             self.f = self.bk.f
             self.mu_rh = self.bk.mu_rH
             self.mu_re = self.bk.mu_rE
+            self.psi = self.bk.psi
+            self.f_norm = self.bk.f_norm
         if not os.path.exists('../output'):
             os.mkdir('../output')  
                                                     
@@ -125,8 +140,14 @@ class simulation_benchmark():
         self.crisis_indicator[self.crisis_indicator==0]=np.nan
         self.crisis_indicator_freq = np.where(self.z_trim < self.z[self.crisis_z],1,0.0)
         self.crisis_indicator_freq[self.crisis_indicator_freq==0] = np.nan
-        self.crisis_length =  np.array([(k, sum(1 for i in g)) for k,g in groupby(self.crisis_indicator.transpose().reshape(-1))])
-        self.crisis_length = np.mean(self.crisis_length[~np.isnan(self.crisis_length[:,0])][:,1])
+        self.crisis_length =  np.array([(k, sum(1 for i in g)) for k,g in groupby(self.crisis_indicator.transpose().reshape(-1))])[:,1]
+        self.crisis_length_mean = np.mean(self.crisis_length[~np.isnan(self.crisis_length)])
+        
+        plt.hist(self.z_trim_ann.reshape(-1), bins=100)
+        plt.figure()
+
+        self.crisis_z_freq = self.z_trim_ann*self.crisis_indicator
+        self.crisis_z_freq = self.crisis_z_freq.reshape(-1)
         
     def compute_statistics_ann_fn(self,fn):
         temp_all = fn(self.z_trim_ann.transpose().reshape(-1)).reshape(self.nsim,-1).transpose()
@@ -239,7 +260,9 @@ class simulation_benchmark():
         self.Q_freq_fn_all, self.Q_freq_fn_crisis, self.Q_freq_fn_good = self.compute_statistics_fn(self.Q_fn)
         self.r_freq_fn_all, self.r_freq_fn_crisis, self.r_freq_fn_good = self.compute_statistics_fn(self.r_fn)
         self.AminusIota_freq_fn_all, self.AminusIota_freq_fn_crisis, self.AminusIota_freq_fn_good = self.compute_statistics_fn(self.AminusIota_fn)
-        self.dexret_freq_fn_all = (np.vstack([np.full([1,self.nsim],np.nan),np.diff(self.Q_freq_fn_all,axis=0)]) + self.AminusIota_freq_fn_all*self.dt)/self.Q_freq_fn_all - self.r_freq_fn_all*self.dt
+        self.dexret_freq_fn_all = (np.vstack([np.full([1,self.nsim],np.nan),np.diff(self.Q_freq_fn_all*self.k_trim,axis=0)]) + self.AminusIota_freq_fn_all*self.dt*self.k_trim)/(self.Q_freq_fn_all*self.k_trim) - self.r_freq_fn_all*self.dt
+        self.iota_freq_fn_all,_,_ = self.compute_statistics_fn(self.iota_fn)
+        #self.dexret_freq_fn_all = (np.vstack([np.full([1,self.nsim],np.nan),np.diff(self.Q_freq_fn_all*self.k_trim,axis=0)]) + (self.aE-self.iota_freq_fn_all)*self.k_trim*self.dt)/(self.Q_freq_fn_all*self.k_trim) - self.r_freq_fn_all*self.dt
         self.exret_freq_fn_all = np.array(pd.DataFrame(self.dexret_freq_fn_all).rolling(2).sum())
         self.rp_freq_fn_all, self.rp_freq_fn_crisis, self.rp_freq_fn_good = self.compute_statistics_fn(self.rp_fn)
         self.coeff1, self.coeff2 = [], []
@@ -253,7 +276,7 @@ class simulation_benchmark():
                 #indep_ = self.rp_freq_fn_all[:,j]
                 indep = np.column_stack([self.exret_freq_fn_all[:,j], (self.exret_freq_fn_all[:,j] * np.array(pd.DataFrame(self.crisis_indicator_freq[:,j]).fillna(0)).transpose()).transpose()])
                 exog = sm_filters.add_constant(indep)
-                reg = sm.OLS(self.exret_freq_fn_all[lags[i]:,j],exog[0:-lags[i],:],missing='drop').fit(cov_type='HAC',cov_kwds={'maxlags' : 1}) #int(0.75* exog.shape[0]**0.33)
+                reg = sm.OLS(self.exret_freq_fn_all[lags[i]:,j],exog[0:-lags[i],:],missing='drop').fit(cov_type='HAC',cov_kwds={'maxlags' : int(0.75* exog.shape[0]**0.33)}) #int(0.75* exog.shape[0]**0.33)
                 coeff1_temp.append(reg.params[1])
                 coeff2_temp.append(reg.params[2])
                 tstat1_temp.append(reg.params[1]/reg.bse[1])
@@ -263,7 +286,8 @@ class simulation_benchmark():
             self.coeff2.append(np.mean(coeff2_temp))
             self.tstat1.append(np.mean(tstat1_temp))
             self.tstat2.append(np.mean(tstat2_temp))
-        
+            
+  
         
     def write_files(self):
         #pd.DataFrame(self.z_sim).to_csv('../output/zsim_bench_gamma' + str(self.gamma) + '_sigma' + str(self.s_a) + '.csv')
@@ -272,6 +296,7 @@ class simulation_benchmark():
         self.plots_()
      
     def plots_(self):
+        
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.hist(self.z_trim_ann.reshape(-1), bins=100)
@@ -314,11 +339,12 @@ class simulation_benchmark():
 ###########################################################################################        
 
 if __name__ == '__main__':
-    rhoE = 0.06; rhoH = 0.03; aE = 0.1; aH = 0.03;  alpha = 1.0;  kappa = 5; delta = 0.035; zbar = 0.1; lambda_d = 0.015
-    gammaE = 1; gammaH = 1; sigma = 0.06; utility = 'crra'; nsim=2
+    rhoE = 0.06; rhoH = 0.03; lambda_d = 0.015; sigma = 0.06; kappa = 7; delta = 0.025; zbar = 0.1; aE = 0.11; aH = 0.03; alpha=0.5;
+    gammaE = 1; gammaH = 1; utility = 'recursive'; nsim=300
     sim1 = simulation_benchmark(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar, utility, nsim)
     sim1.simulate()  
     sim1.compute_statistics()
+    sim1.write_files()
     print(sim1.stats)
     
     
@@ -326,8 +352,8 @@ if __name__ == '__main__':
     plt.figure()
     plt.bar(np.arange(1,50),bruSan_recursive_sim1.tstat1)
     plt.xlabel('lags (months)', fontsize=15)
-    plt.ylabel(r'$\beta_{1}(h): t-stat$',fontsize=15)
-    plt.ylim(-25,25)
+    plt.ylabel(r'$\beta_{1,model}(h): t-stat$',fontsize=15)
+    plt.ylim(-5,5)
     plt.axhline(y=1.96,linewidth=1)
     plt.axhline(y=-1.96,linewidth=1)
     plt.rc('axes',labelsize = 20)
@@ -336,10 +362,10 @@ if __name__ == '__main__':
     plt.show()
     
     plt.figure()
-    plt.bar(np.arange(1,50),np.array(bruSan_recursive_sim1.tstat1)+ np.array(bruSan_recursive_sim1.tstat1) +np.array(bruSan_recursive_sim1.tstat2))
+    plt.bar(np.arange(1,50),np.array(bruSan_recursive_sim1.tstat1) +np.array(bruSan_recursive_sim1.tstat2))
     plt.xlabel('lags (months)',fontsize=15)
-    plt.ylabel(r'$\beta_{1}(h) + \beta_{3}(h): t-stat$',fontsize=15)
-    plt.ylim(-25,25)
+    plt.ylabel(r'$\beta_{1,model}(h) + \beta_{2,model}(h): t-stat$',fontsize=15)
+    plt.ylim(-5,5)
     plt.axhline(y=1.96,linewidth=1)
     plt.axhline(y=-1.96,linewidth=1)
     plt.rc('axes',labelsize = 20)
@@ -347,7 +373,10 @@ if __name__ == '__main__':
     plt.savefig('../output/plots/acf2_model.png')
     plt.show()
     
-    print(bruSan_recursive_sim1.crisis_length)
+    print(bruSan_recursive_sim1.crisis_length_mean)
+    
+    plt.figure()
+    #plot_acf(sim1.Q_freq_fn_all[:,0])
     
     
     
