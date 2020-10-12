@@ -33,7 +33,7 @@ pip install pandas
 
 ## Usage
 1) Solve and compare different models
-```
+```python
 from model_recursive_class import model_recursive 
 from model_class import model 
 from model_general_class import model_general 
