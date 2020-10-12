@@ -1,8 +1,8 @@
 ## MacroFinance
-#Confronting Macro-Finance model with Data (2020)
+##Confronting Macro-Finance model with Data (2020)
 This GitHub repository contains code to solve the class of models from the paper Confronting Macro-Finance model with Data (2020). Please refer to the paper for the model framework. 
 
-#Code
+##Code
 1) main.py: Imports the simulation file and plots main figures in the paper.
 2) model_class.py: Solves the incomplete-market capital mis-allocation model with CRRA utility function. Dependencies: finite_difference.py. 
 3) model_recursive_class.py: Solves the incomlete-market capital mis-allocation model with recursive utiltity and IES=1. Risk aversion can be any positive value. Dependencies: finite_difference.py
