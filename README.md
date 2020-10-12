@@ -1,5 +1,4 @@
-## MacroFinance
-##Confronting Macro-Finance model with Data (2020)
+# MacroFinance
 This GitHub repository contains code to solve the class of models from the paper Confronting Macro-Finance model with Data (2020). Please refer to the paper for the model framework. 
 
 ##Code
@@ -11,5 +10,6 @@ This GitHub repository contains code to solve the class of models from the paper
 6) simulation_model_class.py: Performs model simulation and computes moments and stationary distribution. This is a generic file that can be used for any type of utility functions (log, CRRA, Recursive with IES=1, Recursive with IES different from 1). Dependencies: model_class.py, model_recursive_class.py, model_recursive_general.py, finite_difference.py, interpolate_var.py
 7) interpolate_var.py: Contains modules to interpolate functions using different methods.
 8) empirical.py: Computes empirical risk premium moments from the data and plots autocorrelation. 
-#Questions
+
+##Questions
 If you have any questions with the code, please contact goutham.gopalakrishna@epfl.ch
