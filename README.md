@@ -1,7 +1,16 @@
-# MacroFinance
+# Confronting Macro-Finance model with Data (2020)
 This GitHub repository contains code to solve the class of models from the paper Confronting Macro-Finance model with Data (2020). Please refer to the paper for the model framework. 
 
-##Code
+## Installation
+You need Python 3.5 or later to run mypy. In Ubuntu, Mint and Debian you can install Python 3 like this:
+'''
+$ sudo apt-get install python3 python3-pip 
+'''
+For other Linux flavors, macOS and Windows, packages are available at
+https://www.python.org/getit/
+
+
+## Code description
 1) main.py: Imports the simulation file and plots main figures in the paper.
 2) model_class.py: Solves the incomplete-market capital mis-allocation model with CRRA utility function. Dependencies: finite_difference.py. 
 3) model_recursive_class.py: Solves the incomlete-market capital mis-allocation model with recursive utiltity and IES=1. Risk aversion can be any positive value. Dependencies: finite_difference.py
@@ -11,5 +20,5 @@ This GitHub repository contains code to solve the class of models from the paper
 7) interpolate_var.py: Contains modules to interpolate functions using different methods.
 8) empirical.py: Computes empirical risk premium moments from the data and plots autocorrelation. 
 
-##Questions
+## Questions
 If you have any questions with the code, please contact goutham.gopalakrishna@epfl.ch
