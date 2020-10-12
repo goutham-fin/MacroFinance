@@ -24,5 +24,12 @@ pip install pandas
 7) interpolate_var.py: Contains modules to interpolate functions using different methods.
 8) empirical.py: Computes empirical risk premium moments from the data and plots autocorrelation. 
 
+
+## Data description
+1) pd_shiller.csv: Historical price-dividend ratio data from Robert Shiller's website (http://www.econ.yale.edu/~shiller/data.htm)
+2) predictor_data.csv: Equity risk premium predictor data from Amit Goyal's website (http://www.hec.unil.ch/agoyal/)
+3) rf.csv: Historical T-bill rate 
+4) USREC.csv: US recessionary periods data from NBER website (https://www.nber.org/cycles.html)
+
 ## Questions
 If you have any questions with the code, please contact goutham.gopalakrishna@epfl.ch
