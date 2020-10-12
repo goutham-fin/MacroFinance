@@ -64,7 +64,7 @@ model2.solve()
 plt.plot(model1.Q), plt.plot(model2.Q)
 ```
 2) Simulate different models and compare moments
-```
+```python
 from model_recursive_class import model_recursive 
 from simulation_model_class import simulation_benchmark
 
