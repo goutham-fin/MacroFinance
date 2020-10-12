@@ -31,5 +31,70 @@ pip install pandas
 3) rf.csv: Historical T-bill rate 
 4) USREC.csv: US recessionary periods data from NBER website (https://www.nber.org/cycles.html)
 
+## Usage
+1) Solve and compare different models
+```
+from model_recursive_class import model_recursive 
+from model_class import model 
+from model_general_class import model_general 
+import matplotlib.pyplot as plt
+
+#Technology/preferences	
+rhoE = 0.05; rhoH = 0.05; sigma = 0.06; gammaE = 5; gammaH = 5; 
+IES = 1.5; aE = 0.1; aH = 0.03; kappa = 7; delta = 0.025; 
+#Demogrphics
+zbar = 0.1;   lambda_d = 0.015;
+#Frictions
+alpha=0.5;
+
+#solve model1
+model1 = model_general(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, 
+			gammaH, IES, kappa, delta, lambda_d, zbar)
+model1.solve()
+
+#solve model2
+#switch to model with unitary IES
+IES =1.0
+#solve model
+model2 = model_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, 
+				gammaH, IES, kappa, delta, lambda_d, zbar)
+model2.solve()
+
+#plot capital price (Q) from the model1 and model2
+plt.plot(model1.Q), plt.plot(model2.Q)
+```
+2) Simulate different models and compare moments
+```
+from model_recursive_class import model_recursive 
+from simulation_model_class import simulation_benchmark
+
+
+#Technology/preferences	
+rhoE = 0.05; rhoH = 0.05; sigma = 0.06; gammaE = 5; gammaH = 5; 
+IES = 1.5; aE = 0.1; aH = 0.03; kappa = 7; delta = 0.025; 
+#Demogrphics
+zbar = 0.1;   lambda_d = 0.015;
+#Frictions
+alpha=0.5;
+#set number of simulations
+nsim = 500
+
+#simulate model1
+simulate_model1 = simulation_benchmark(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, IES, kappa, delta, lambda_d, zbar,utility, nsim)
+simulate_model1.compute_statistics()
+print(simulate_model1.stats) #print key statistics
+simulate_model1.write_files() #store key statistics for later use
+
+#simulate model2
+#change IES value
+IES =1.0
+simulate_model2 = simulation_benchmark(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, IES, kappa, delta, lambda_d, zbar,utility, nsim)
+simulate_model2.compute_statistics()
+
+#compare stationary distribution from two models
+plt.plot(simulate_model1.z_sim.reshape(-1)) 
+plt.hist(simulate_model2.z_sim.reshape(-1))
+```
+
 ## Questions
 If you have any questions with the code, please contact goutham.gopalakrishna@epfl.ch
