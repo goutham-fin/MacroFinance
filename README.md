@@ -15,7 +15,7 @@ pip install pandas
 ```
 
 ## Code description
-1) main.py: Imports the simulation file and plots main figures in the paper.
+1) ```python main.py```: Imports the simulation file and plots main figures in the paper.
 2) model_class.py: Solves the incomplete-market capital mis-allocation model with CRRA utility function. Dependencies: finite_difference.py. 
 3) model_recursive_class.py: Solves the incomplete-market capital mis-allocation model with recursive utiltity and IES=1. Risk aversion can be any positive value. Dependencies: finite_difference.py
 4) model_recursive_general_class.py: Solves the incomplete-market capital mis-allocation model with recursive utiltity and IES different from unity. Risk aversion can be any positive value. Dependencies: finite_difference.py
