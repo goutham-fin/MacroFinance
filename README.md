@@ -1,14 +1,18 @@
 # Confronting Macro-Finance model with Data (2020)
 This GitHub repository contains code to solve the class of models from the paper Confronting Macro-Finance model with Data (2020). Please refer to the paper for the model framework. 
 
-## Installation
+## Requirements
 You need Python 3.5 or later to run mypy. In Ubuntu, Mint and Debian you can install Python 3 like this:
-'''
+```
 $ sudo apt-get install python3 python3-pip 
-'''
+```
 For other Linux flavors, macOS and Windows, packages are available at
 https://www.python.org/getit/
 
+The following python packages need to be installed and imported: numpy 1.19.1, pandas 1.0.1, matplotlib 3.3.0, scipy 1.5.2, statsmodels 0.11.0, dill 0.3.2, seaborn 0.10.0. The packages can be installed using pip like this
+```
+pip install pandas
+```
 
 ## Code description
 1) main.py: Imports the simulation file and plots main figures in the paper.
