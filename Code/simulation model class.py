@@ -23,17 +23,25 @@ from itertools import groupby
 from statsmodels.graphics.tsaplots import plot_acf
 
 class simulation_benchmark():
+    '''
+    This class simulates the models from generalized framework built in the paper 
+    Confronting Macro-finance model with data (2020)
+    For log utility: set utility='recursive'; IES=1; gammaE=1; gammaH=1
+    For CRRA utility: set utility ='crra'; 
+    For Recursive utility with IES=1: set utility='recursive';IES=1
+    For Recursive utilty with non-unitary IES: set utility = 'recursive-general'; 
+    '''
     def __init__(self, rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar, utility, nsim):
-        T = 5000
-        self.dt = 1/12
-        self.t = np.arange(0,T,self.dt)
-        self.burn_period = 1000/self.dt
+        T = 5000 #time period length for simulating the model
+        self.dt = 1/12 #frequency
+        self.t = np.arange(0,T,self.dt) #time grid
+        self.burn_period = 1000/self.dt #burn out period
         self.rhoE, self.rhoH, self.aE, self.aH, self.sigma, self.alpha, self.gammaE, self.gammaH, self.kappa, self.delta, self.lambda_d, self.zbar, self.utility = rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar, utility
-        self.mu0 = 0.5
+        self.mu0 = 0.5 #initial wealth share
         self.k0 = 100
         self.nsim = nsim
         
-        
+        #solve the model and collect the variables
         if self.utility == 'recursive':
             self.bk = model_recursive(self.rhoE, self.rhoH, self.aE, self.aH, self.sigma, self.alpha, self.gammaE, self.gammaH, self.kappa, self.delta, self.lambda_d, self.zbar)
             self.bk.solve()          
@@ -64,6 +72,7 @@ class simulation_benchmark():
             os.mkdir('../output')  
                                                     
     def interpolate_values(self):
+        #interpolate variables outside the grid points
         self.mu_z_fn = self.interpolate_var(self.mu_z[:,0])
         self.sig_z_fn = self.interpolate_var(self.sig_za[:,0])
         self.iota_fn = self.interpolate_var(self.iota[:,0])
@@ -87,8 +96,8 @@ class simulation_benchmark():
          
     
     def simulate(self):
+
         self.interpolate_values()
-        #self.nsim = 3
         self.z_sim = np.array(np.tile(self.mu0,(self.t.shape[0],self.nsim)),dtype=np.float64)
         self.k_sim = np.array(np.tile(self.k0,(self.t.shape[0],self.nsim)),dtype=np.float64)
         self.shock_series = np.array(np.tile(0,(self.t.shape[0],self.nsim)),dtype=np.float64)

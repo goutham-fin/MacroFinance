@@ -17,50 +17,68 @@ from finite_difference import hjb_implicit, hjb_explicit, hjb_implicit_upwind, h
 import os
 from scipy.interpolate import interp1d
 
+'''
+Variable names used in model input:
+rhoE: discount rate of experts
+rhoH: discount rate of households
+aE: productivity of experts
+aH: productivity of households
+alpha: skin-in-the-game constraint
+kappa: investment costs 
+delta: depreciation rate
+gammaE: risk aversion of experts
+gammaH: risk aversion of households
+IES: Inter-temporal elasticity of substitution
+zbar: mean proportion of experts 
+lambda_d : death rate
+utility: type of utility function
+nsim: number of simulations to run
+'''
+
 class  model():
+    '''
+    This class solves the baseline model with CRRA utility from the paper 'Confronting Macro-finance model with Data (2020). 
+    '''
     def __init__(self,rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar):
-        self.rhoE = rhoE
-        self.rhoH = rhoH
-        self.lambda_d = lambda_d
-        self.sigma = sigma
-        self.kappa = kappa
-        self.delta = delta
-        self.gammaE = gammaE
-        self.gammaH = gammaH
-        self.alpha = alpha
+        self.rhoE = rhoE #discount rate of experts
+        self.rhoH = rhoH #discount rate of households
+        self.lambda_d = lambda_d #death rate (OLG)
+        self.sigma = sigma #exogenous volatility
+        self.kappa = kappa # capital adjustment cost
+        self.delta = delta #depreciation of capital 
+        self.gammaE = gammaE #risk aversion of experts
+        self.gammaH = gammaH #risk aversion of households
+        self.alpha = alpha #skin-in-the game constraint
         
-        self.zbar = zbar
-        self.aE = aE
-        self.aH = aH
+        self.zbar = zbar #proportion of experts (OLG)
+        self.aE = aE #expert productivity rate 
+        self.aH = aH #household productivity rate 
         
-        self.Nz   = 1000; 
-        self.Nf = 1
-        self.Nz_temp = 0;
-        self.z = np.linspace(0.001,0.999,self.Nz)
-        #self.z = 3*zz**2  - 2*zz**3; 
-        self.z_mat = np.tile(self.z,(self.Nf,1)).transpose()
-        self.dz  = self.z_mat[1:self.Nz] - self.z_mat[0:self.Nz-1];   
-        self.dz2 = self.dz[0:self.Nz-2]**2;
+        self.Nz   = 1000;  #Wealth-share grid
+        self.Nf = 1 #used for convenience
+        self.Nz_temp = 0; #helper variable 
+        self.z = np.linspace(0.001,0.999,self.Nz) #linear grid for wealth share
+        self.z_mat = np.tile(self.z,(self.Nf,1)).transpose() 
+        self.dz  = self.z_mat[1:self.Nz] - self.z_mat[0:self.Nz-1]; #first difference of grid
+        self.dz2 = self.dz[0:self.Nz-2]**2; 
         
-        self.q   =  np.array(np.tile(1,(self.Nz,self.Nf)),dtype=np.float64); 
-        self.qz  = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
-        self.qzz = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
+        self.q   =  np.array(np.tile(1,(self.Nz,self.Nf)),dtype=np.float64); #capital price
+        self.qz  = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); #first difference of capital price
+        self.qzz = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); #second difference of capital price
         
-        self.thetah=  np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
-        self.theta= np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
-        self.r = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
-        self.ssq= np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
-        self.chi= np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64);
+        self.thetah=  np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); #portfolio of households 
+        self.theta= np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); #portfolio of experts
+        self.r = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); #risk free rate
+        self.ssq= np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); #return volatility
+        self.chi= np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
         
         self.dz_mat = np.tile(self.dz,(self.Nf,1))
         self.dz2_mat = np.tile(self.dz2,(self.Nf,1))
-        self.psi = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64) 
-        p = self.aE**(-self.gammaH) * (1-self.z) **(1-self.gammaH)
-        p1 = self.aE**(-self.gammaE) * self.z **(1-self.gammaE)
-        self.Jh=np.array(np.tile(p,(self.Nf,1)).transpose(), dtype=np.float64)
-        self.Je=np.array(np.tile(p1,(self.Nf,1)).transpose(), dtype=np.float64)
-        self.Jhz= np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64)
-        self.Jhzz= np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64)
+        self.psi = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64) #capital share of experts
+        self.Jh=np.array(np.tile(p,(self.Nf,1)).transpose(), dtype=np.float64) #value function of households
+        self.Je=np.array(np.tile(p1,(self.Nf,1)).transpose(), dtype=np.float64) #value function of experts
+        self.Jhz= np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64) #first derivative of value function
+        self.Jhzz= np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64) #second derivative of value function
         self.Jez = np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64)
         self.Jezz = np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64)
 
@@ -68,11 +86,16 @@ class  model():
         self.Jhzzl= np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64)
         self.Jezl= np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64)
         self.Jezzl= np.array(np.tile(0,(self.Nz,self.Nf)),dtype=np.float64)
-        self.crisis_z =0
+        self.crisis_z =0 #crisis boundary
         if not os.path.exists('../output'):
             os.mkdir('../output')
 
     def equations_region1(self, q_p, Psi_p, sig_ka_p, zi, fi):  
+        '''
+        Solves for the equilibrium policy in the crisis region 
+        Input: old values of capital price(q_p), capital share(Psi_p), return volatility(sig_ka_p), grid point(zi)
+        Output: new values from Newton-Rhaphson method
+        '''
         i_p = (q_p -1)/self.kappa
         eq1 = (self.aE-self.aH)/q_p  - \
                             self.alpha*(self.Jhzl[zi,fi] - self.Jezl[zi,fi] + 1/(self.z_mat[zi,fi] * (1-self.z_mat[zi,fi])))  * (self.alpha* Psi_p - self.z_mat[zi,fi]) * sig_ka_p**2
@@ -100,7 +123,9 @@ class  model():
         del QN
         return EN
     def equations_region_(self,q_p, Psi_p, sig_ka_p, zi, fi):
-        #simplify when gammaE=gammaH
+        '''
+        Solves for the equilibrium policies in crisis regime
+        '''
         eq1 = np.log(q_p)/self.gammaE + np.log(self.GS[zi,fi]) - np.log(self.aE*Psi_p + self.aH*(1-Psi_p) - (q_p-1)/self.kappa)
         eq2 = sig_ka_p*(q_p - (q_p - self.q[zi-1,fi])*(self.alpha*Psi_p - self.z_mat[zi,fi])/self.dz[zi-1,fi]) - self.sigma*q_p
         eq3 = self.aE - self.aH - q_p*self.alpha*(self.alpha*Psi_p - self.z_mat[zi,fi])*sig_ka_p**2* self.JJlp[zi,fi]
@@ -126,6 +151,9 @@ class  model():
         return [EN[1],EN[2],EN[0]]
 
     def equations_region2(self, q_p, sig_ka_p, zi, fi):
+        '''
+        Solves for the equilibrium policies in normal regime
+        '''
         i_p = (q_p -1)/self.kappa
         
         
@@ -141,6 +169,9 @@ class  model():
         return EN
 
     def initialize_(self):
+        '''
+        Initialize variables at z=0
+        '''
         sig_ka_q = self.sigma
         Psi_q =0
         GS_e = (self.z_mat/self.Je)**(1/self.gammaE)
@@ -165,17 +196,18 @@ class  model():
 
     
     def solve(self):
-        fi=0
+        '''
+        Model solution
+        '''
+        fi=0 #for convenience (to handle numpy matrices)
         for t in range(40):
             self.chi[:,0] = np.maximum(self.alpha,self.z)
             self.first_time = 0
             self.Jhz[1:self.Nz,:]  = (self.Jh [1:self.Nz,:] - self.Jh [0:self.Nz-1,:])/self.dz_mat; self.Jhz[0,:]=0;
-            #Jhz = np.hstack([ (Jh[1,:]-Jh[0,:])/(z[1] - z[0]), (Jh[2:,:] - Jh[0:-2,:]).reshape(-1)/(z[2:]-z[0:-2]).reshape(-1), (Jh[-1,:]-Jh[-2,:]).reshape(-1)/(z[-1] - z[-2]).reshape(-1) ]).reshape(Nz,1)
             self.Jhzz[0:self.Nz-2,:] = (self.Jh[2:self.Nz,:] + self.Jh[0:self.Nz-2,:] - 2.*self.Jh[1:self.Nz-1,:])/(self.dz2_mat); self.Jhzz[-2,:]=0; self.Jhzz[-1,:]=0 
             self.Jhzl  = self.Jhz/self.Jh ; 
             self.Jhzzl = self.Jhzz/ self.Jh;
             
-            #Jez = np.hstack([ (Je[1,:]-Je[0,:])/(z[1] - z[0]), (Je[2:,:] - Je[0:-2,:]).reshape(-1)/(z[2:]-z[0:-2]).reshape(-1), (Je[-1,:]-Je[-2,:]).reshape(-1)/(z[-1] - z[-2]).reshape(-1) ]).reshape(Nz,1)
             self.Jez[1:self.Nz,:]  = (self.Je [1:self.Nz,:] - self.Je [0:self.Nz-1,:])/self.dz_mat; self.Jez[0,:]=0;
             self.Jezz[0:self.Nz-2,:] = (self.Je[2:self.Nz,:] + self.Je[0:self.Nz-2,:] - 2.*self.Je[1:self.Nz-1,:])/(self.dz2_mat); self.Jezz[-2,:]=0; self.Jezz[-1,:]=0
             self.Jezl  = self.Jez/self.Je ; 
@@ -184,9 +216,12 @@ class  model():
             self.JJlp = self.Jhzl - self.Jezl + 1/(self.z_mat*(1-self.z_mat))
         
 
-            # zi=1
+            
             for zi in range(1,self.Nz):
                 if zi==1:
+                    '''
+                    For the first grid point
+                    '''
                     q_init, Psi_init, sig_ka_init = self.initialize_()
                     self.q[zi-1,:], self.psi[zi-fi], self.ssq[zi-1,fi]  = q_init, Psi_init, sig_ka_init
                     result = self.equations_region1(q_init, Psi_init, sig_ka_init, zi, fi)
@@ -208,12 +243,11 @@ class  model():
                                      
                     else:
                         self.psi[zi,fi], self.ssq[zi,fi], self.q[zi,fi] =result[0], result[1], result[2]
-                        #self.chi[zi,fi] = self.alpha * self.psi[zi,fi]
                         del(result)
 
             #value function iteration
+
             self.qz[1:self.Nz,:]  = (self.q [1:self.Nz,:] - self.q [0:self.Nz-1,:])/self.dz_mat; self.qz[0,:]=self.qz[1,:];
-            #self.qzz[2:self.Nz,:] = (self.q[2:self.Nz,:] + self.q[0:self.Nz-2,:] - 2.*self.q[1:self.Nz-1,:])/(self.dz2_mat); self.qzz[0,:]=self.qzz[2,:]; self.qzz[1,:]=self.qzz[2,:]; 
             self.qzz[2:self.Nz,:] = (self.q[2:self.Nz,:] + self.q[0:self.Nz-2,:] - 2.*self.q[1:self.Nz-1,:])/(self.dz2.reshape(-1,1)); self.qzz[0,:]=self.qzz[2,:]; self.qzz[1,:]=self.qzz[2,:]; 
             
             self.qzl  = self.qz/self.q ; 
@@ -223,14 +257,14 @@ class  model():
             self.crisis_flag[0:self.crisis_z] = 1
             
             
-            self.iota = (self.q - 1)/self.kappa
+            self.iota = (self.q - 1)/self.kappa 
             self.Phi = (np.log(self.q))/self.kappa
             self.theta = (self.chi*self.psi)/self.z_mat
             self.thetah = (1-(self.chi*self.psi))/(1-self.z_mat)
             self.theta[0,:] = self.theta[1,:]
                 
             self.sig_za =  self.z_mat * (self.theta-1) * self.ssq
-            #self.sig_za[-1,:]=0
+            
 
             self.sig_jha =  self.Jhzl*self.sig_za
             
@@ -242,11 +276,10 @@ class  model():
             self.rp_ = self.priceOfRiskE*self.ssq
             self.cw_h = (((1-self.z_mat)*self.q) ** ((1-self.gammaH) / self.gammaH)) / self.Jh**(1/self.gammaH)
             self.cw_e = ((self.z_mat*self.q) ** ((1-self.gammaE) / self.gammaE)) / self.Je**(1/self.gammaE)
-            #self.mu_z = self.z_mat*((self.aE-self.iota)/self.q - self.cw_e + (self.theta-1)*self.ssq*(self.rp/self.ssq - self.ssq) + self.ssq*(1-self.alpha)*(self.rp/self.ssq - self.rp_/self.ssq) + (self.lambda_d/self.z_mat)*(self.zbar-self.z_mat))
             self.mu_z = ((self.aE - self.iota)/self.q - self.cw_e)*self.z_mat + \
                                 self.sig_za*(self.priceOfRiskE - self.ssq) + self.z_mat*self.ssq*(self.priceOfRiskE - self.priceOfRiskH)*(1-self.alpha) + (self.lambda_d)*(self.zbar-self.z_mat)
             
-            #self.mu_z[0,:]=0
+            
             self.mu_jh=  self.Jhzl*self.mu_z + 0.5 *self.Jhzzl * (self.sig_za**2) 
             self.mu_je= self.Jezl*self.mu_z+  0.5 *self.Jezzl * (self.sig_za**2) 
             self.mu_q =  self.qzl * self.mu_z + 0.5*self.qzzl*self.sig_za**2 
@@ -256,12 +289,9 @@ class  model():
             self.mu_rE = (self.aE - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)
             self.priceOfRiskE = self.rp/self.ssq
             self.priceOfRiskH = self.rp_/self.ssq
-            #self.r = self.crisis_flag * (self.mu_rE - self.sigma * (self.ssq - self.sigma) - self.sigma*(self.priceOfRiskE))  + \
-            #        (1-self.crisis_flag) * (self.mu_rE  - self.sigma * (self.ssq - self.sigma) - self.sigma*(self.priceOfRiskE))
             self.r = self.mu_rE - self.ssq*self.priceOfRiskE 
             self.r[self.crisis_z:self.crisis_z+2] = 0.5*(self.r[self.crisis_z+2] + self.r[self.crisis_z-1]) #r is not defined at the kink, so replace with average of neighbours to avoid numerical issues during simulation                     
             
-            #self.r = ((self.aE-self.iota)/self.q + self.Phi   - self.delta + self.mu_q + self.sigma * (self.ssq - self.sigma)   - self.rp)
             
             
             self.Ah = self.rhoH - self.cw_h - (1-self.gammaH) * (self.Phi - self.delta) + 0.5 * self.gammaH *(1-self.gammaH) * self.sigma**2 - (1-self.gammaH) * self.sigma * self.sig_jha
@@ -280,6 +310,9 @@ class  model():
     
             
     def plots_(self):
+        '''
+        create plots
+        '''
             if not os.path.exists('../output/plots'):
                 os.mkdir('../output/plots') 
             plot_path = '../output/plots/'
@@ -312,6 +345,9 @@ class  model():
             plt.plot(self.z, self.pd)
 
     def kfe(self):
+        '''
+        compute stationary distribution of wealth share
+        '''
         self.coeff = 2*self.mu_z[1:-1]/(self.sig_za[1:-1]**2)
         self.coeff_fn = interp1d(self.z[1:-1],self.coeff.reshape(-1),kind='nearest',fill_value='extrapolate')
         Nh = 10000
@@ -342,10 +378,7 @@ class  model():
     
 if __name__ == '__main__':
     rhoE = 0.06; rhoH = 0.03; aE = 0.11; aH = 0.03;  alpha = 0.5;  kappa = 7; delta = 0.025; zbar = 0.1; lambda_d = 0.0; sigma = 0.06
-
     gammaE = 2; gammaH=2; utility = 'crra'
-
-    
     m = model(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar)
     m.solve()
     m.plots_()

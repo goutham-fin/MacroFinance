@@ -16,40 +16,41 @@ from statsmodels.iolib.summary2 import summary_col
 import statistics
 from statsmodels.graphics import tsaplots
 
+'''
+This file performs risk premium estimation and computes first and second moments of premia from the data
+Input: price-dividend (Shiller's website), risk premia predictors (Amit Goyal's website), NBER recessionary periods
+Output: autocorrelation plots, first and second moments of equity risk premium.       
+'''
+#load risk free rate
 rf = pd.read_csv('../Data/rf.csv',sep=';')
 rf = rf.set_index(pd.to_datetime(pd.to_datetime(rf.date,format='%Y%m'),format='%Y-%m'))
 rf.drop(columns=['date'],inplace=True)
 rf.rf = rf.rf
 freq = 12
 
-
+#load Shiller data
 pd_data = pd.read_csv('../Data/pd_shiller.csv',sep=';')
 pd_data = pd_data.set_index(pd.to_datetime(pd.to_datetime(pd_data.Date,format='%Y-%m'),format='%Y-%m'))
 pd_data.drop(columns=['Date'],inplace=True)
 
+#load NBER recessionary data
 usRec = pd.read_csv('../Data/USREC.csv')
 usRec = usRec.set_index(pd.to_datetime(pd.to_datetime(usRec.DATE,format='%Y-%m-%d'),format='%Y-%m'))
 usRec.drop(columns=['DATE'],inplace=True)
 usRec['crisis'] = 0
-#crises_years= ['1874','1884', '1930', '2009']
-#for j in range(len(crises_years)): usRec.loc[crises_years[j],'crisis'] = 1
+
+#Manually set crises periods
 usRec.loc['1894-01-01':'1894-06-01','crisis'] = 1
 usRec.loc['1930-01-01':'1830-12-01','crisis'] = 1
 usRec.loc['1982-01-01':'1982-11-01'] = 1
 usRec.loc['2008-09-01':'2009-06-01','crisis'] = 1
 
+#predictor variables from Amit Goyal's website
 predictor_data = pd.read_csv('../Data/predictor_data.csv',sep=';')
 predictor_data = predictor_data.set_index(pd.to_datetime(pd.to_datetime(predictor_data.yyyymm,format='%Y%m'),format='%Y-%m'))
 
+#create price-dividend ratio
 pd_data['dp'] = pd_data.D/pd_data.P
-#rf = rf.resample('M').agg(lambda x: (1+x).prod()-1)
-#pd_data = pd_data.resample('M').agg('sum')
-#usRec = usRec.resample('M').agg('sum')
-#usRec['USREC'] = np.where(usRec.USREC>0,1,0)
-#usRec['crisis'] = np.where(usRec.crisis>0,1,0)
-
-#pd_data.dp = np.log(pd_data.dp)
-
 pd_data = pd_data.merge(predictor_data['CRSP_SPvwx'], how='left', right_index=True, left_index=True)
 pd_data['Ret'] = np.log(pd_data.P).diff()
 #pd_data['Ret'] = pd_data['CRSP_SPvwx']
@@ -63,6 +64,7 @@ pd_data = pd_data.merge(rf,how='left',left_index = True, right_index=True)
 pd_data = pd_data.merge(usRec,how='left',left_index = True, right_index=True)
 pd_data['exRet'] = pd_data.Ret - pd_data.rf
 
+#create autocorrelation plots
 start_date_acf = '1926'
 end_date_acf = '2013'
 acf_coeff1, acf_coeff2, acf_coeff3 = [],[],[]
@@ -104,6 +106,7 @@ plt.savefig('../output/acf2.png')
 plt.show()
 
 
+#estimation of risk premia
 start_date = '1926'
 end_date = '2018'
 pd_data = pd_data[start_date:end_date]

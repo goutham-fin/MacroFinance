@@ -3,6 +3,9 @@ import numpy as np
 from scipy import interpolate
 from scipy.interpolate import interp2d, interp1d
 
+'''
+This file uses different customized interpolation functions used in model simulations. 
+'''
 def interpolate_variable(var,points, z, f):
     def interp_weights(xy, uv,d=2):
         tri = qhull.Delaunay(xy)
@@ -43,7 +46,7 @@ def interpolate_simple(var, points, z, f):
 
 from scipy.interpolate import griddata
 
-def interpolate_grid(var, z, f): #need to fix dimensions -> it is fixed using .ravel() 
+def interpolate_grid(var, z, f):
     f_extended = np.linspace(f[0],f[-1],z.shape[0])
     X, Y = np.meshgrid(z,f_extended)
     points1,points2 = np.meshgrid(z,f)
@@ -52,6 +55,7 @@ def interpolate_grid(var, z, f): #need to fix dimensions -> it is fixed using .r
     return value
 
 def interpolate_loop(var, z, f):
+    #interpolates by considering each data point. Very inefficient.
     f_extended = np.linspace(f[0],f[-1],z.shape[0])
     var_fn = np.array(np.tile(np.NaN, (var.shape[0], f_extended.shape[0])))
     var_fn = interp1d(f, var, fill_value = 'extrapolate')(f_extended)
@@ -62,7 +66,7 @@ def interpolate_loop(var, z, f):
 from scipy.spatial import Delaunay
 from scipy.interpolate import LinearNDInterpolator
 
-def interpolate_pd(var, points, z, f): #need to fix this. does not work
+def interpolate_pd(var, points, z, f):
     mesh1 = z.shape[0]*2
     tri = Delaunay(mesh1)  # Compute the triangulation
     # Perform the interpolation with the given values:

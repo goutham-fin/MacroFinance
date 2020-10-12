@@ -8,27 +8,46 @@ from simulation_benchmark_class_v12 import simulation_benchmark
 from model_recursive_class import model_recursive
 from model_class import model
 import os
-#plt.rcParams['axes.facecolor']='white'
-#plt.rcParams['savefig.facecolor']='white' 
+
+'''
+Variable names used in model input:
+rhoE: discount rate of experts
+rhoH: discount rate of households
+aE: productivity of experts
+aH: productivity of households
+alpha: skin-in-the-game constraint
+kappa: investment costs 
+delta: depreciation rate
+gammaE: risk aversion of experts
+gammaH: risk aversion of households
+IES: Inter-temporal elasticity of substitution
+zbar: mean proportion of experts 
+lambda_d : death rate
+utility: type of utility function
+nsim: number of simulations to run
+'''
 
 if __name__ == '__main__':
-    pickle_path = '../../../../Desktop/pickles/'
+    pickle_path = '../../../../Desktop/pickles/' #specify location to store pickles (need lots of space)
     
+    #function to store objects as pickles
     def pickle_stuff(object_name,filename):
         with open(pickle_path+filename,'wb') as f:
             dill.dump(object_name,f)
-   
+    #function to read objects 
     def read_pickle(filename):
         with open(str(filename) + '.pkl', 'rb') as f:
             return dill.load(f)
     
-    run = 'load and plot' #specify whether to run 'key' or 'all' (or 'base') or 'load and plot'
+    run = 'load and plot' 
+    '''
+    specify whether to run 'key' or 'all' (or 'base') or 'load and plot'. 'key' runs only for risk aversion 1,2,5, and 15.
+    'all' runs for risk aversion from 1 till 20. 'load and plot' loads from pickles and plots equity risk premium.
+    '''
     nsim = 100
     
-    
-    
     if run == 'all':
-        utility = 'recursive'
+        utility = 'recursive' #utility can be 'recursive (IES=1)', 'recursive_general(IES!=1)', or 'crra'
         sims = [0]*22
         rhoE = 0.06; rhoH = 0.03; aE = 0.11; aH = 0.03;  alpha = 0.5;  kappa = 7; zbar = 0.1; lambda_d = 0.015; sigma = 0.06
         delta = 0.025; #to match E[GDP Growth] = 2.0%
@@ -66,7 +85,7 @@ if __name__ == '__main__':
         
         rhoE = 0.06; rhoH = 0.03; aE = 0.11; aH = 0.03;  alpha = 0.5;  zbar = 0.1; lambda_d = 0.015; sigma = 0.06
         delta = 0.025; kappa = 7; #to match E[GDP Growth] = 1.5-2.5.0%
-        gammaE = 2; gammaH = 2; sigma = 0.06; utility = 'recursive'
+        gammaE = 10; gammaH = 10; sigma = 0.06; utility = 'recursive'
         sim3 = simulation_benchmark(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, kappa, delta, lambda_d, zbar, utility, nsim)
         sim3.simulate()  
         sim3.compute_statistics()
@@ -128,7 +147,6 @@ if __name__ == '__main__':
     
     if run=='load and plot':
         plot_sims = []
-    
         for j in [0,1,2,3,4,19]:
             plot_sims.append('sims['+str(j) +']')
         #del plot_sims[7]
@@ -141,8 +159,6 @@ if __name__ == '__main__':
                 x2.append(eval(plot_sims[j] + '.stats.loc[vars_plot[2]].values'))
                 x3.append(eval(plot_sims[j] + '.stats.loc[vars_plot[3]].values'))
                 x4.append(eval(plot_sims[j] + '.crisis_length'))
-        #x4 = [0 if math.isnan(i) else i for i in x4]        
-        #crisis length
         
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
