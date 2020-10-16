@@ -24,6 +24,7 @@ pip install pandas
 7) ```interpolate_var.py```: Contains modules to interpolate functions using different methods.
 8) ```empirical.py```: Computes empirical risk premium moments from the data and plots autocorrelation. 
 
+:warning: Confessions of the programmer: The code is written in a way to enhance understanding of the model which means that 'efficient programming' takes a back seat. For example, I do not shy away from declaring separate variables for each equilibrium object in the model. I find that the efficiency gain from writing concise code is not high enough to overcome the loss in clarity. Therefore, I favor brute-force programming methods where applicable.   
 
 ## Data description
 1) ```pd_shiller.csv```: Historical price-dividend ratio data from Robert Shiller's website (http://www.econ.yale.edu/~shiller/data.htm)
