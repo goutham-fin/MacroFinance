@@ -1,5 +1,3 @@
-#import tensorflow.compat.v1 as tf
-#tf.disable_v2_behavior()
 import logging, os 
 os.system('clear')
 logging.disable(logging.WARNING) 
@@ -33,8 +31,6 @@ class nnpde_informed():
         self.dt = dt
         self.lb = np.array([0,self.dt])
         self.ub = np.array([1,0])
-        #self.lb = 0
-        #self.ub = 1
         self.learning_rate = learning_rate
         
         self.z_u = self.X[:,0:1]
@@ -49,7 +45,6 @@ class nnpde_informed():
         self.weights, self.biases = self.initialize_nn(layers)
         
         #tf placeholders and computational graph
-        #tf.reset_default_graph()
         self.sess = tf.Session(config = tf.ConfigProto(allow_soft_placement = True, log_device_placement = True))
         self.z_u_tf = tf.placeholder(tf.float32,shape=[None,self.z_u.shape[1]])
         self.t_u_tf = tf.placeholder(tf.float32,shape=[None,self.t_u.shape[1]])

@@ -38,7 +38,7 @@ nsim: number of simulations to run
 
 class  model():
     '''
-    This class solves the baseline model with CRRA utility from the paper 'Confronting Macro-finance model with Data (2020). 
+    This class solves the baseline model with CRRA utility from the paper 'Asset Pricing with Realistic Crisis Dynamics (2020)'. 
     '''
     def __init__(self,params):
         self.params = params

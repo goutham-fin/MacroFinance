@@ -21,12 +21,26 @@ import time
 from Extended.nnpde import nnpde_informed
 
 class model_nnpde():
+    '''
+    This class solves the two dimensional model with recursive utility and IES=1 from the paper 
+    'Asset Pricing with Realistic Crisis Dynamics (2020)'
+    '''
     def __init__(self,params):
         self.params = params
+        # algorithm parameters
+        self.maxIterations=150
+        self.convergenceCriterion = 1e-2;
+        self.converged = False
+        self.Iter=0
+        if not os.path.exists('../output'):
+            os.mkdir('../output')
+        self.amax = np.float('Inf')
+        self.amax_vec=[]
+
+        #grid 
         self.Nz = 1000
         self.Nf = 30
         self.z = np.linspace(0.001,0.999, self.Nz)
-        #self.z = 3*zz**2  - 2*zz**3; 
         self.dz  = self.z[1:self.Nz] - self.z[0:self.Nz-1];  
         self.dz2 = self.dz[0:self.Nz-2]**2;
         self.z_mat = np.tile(self.z,(self.Nf,1)).transpose()
@@ -39,6 +53,7 @@ class model_nnpde():
         self.df_mat = np.tile(self.df,(self.Nz,1))
         self.df2_mat = np.tile(self.df2,(self.Nz,1))
         
+        #variables to store equilibrium quantities
         self.q   =  np.array(np.tile(1,(self.Nz,self.Nf)),dtype=np.float64); 
         self.qz  = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
         self.qzz = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
@@ -63,16 +78,14 @@ class model_nnpde():
         self.first_time = np.linspace(0,0,self.Nf)
         self.psi = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64) 
         
-        self.maxIterations=150
-        self.convergenceCriterion = 1e-2;
-        self.converged = False
-        self.Iter=0
-        if not os.path.exists('../output'):
-            os.mkdir('../output')
-        self.amax = np.float('Inf')
-        self.amax_vec=[]
+        
         
     def equations_region1(self,q_p, Psi_p, sig_qk_p, sig_qf_p, zi, fi):
+        '''
+        Solves for the equilibrium policy in the crisis region 
+        Input: old values of capital price(q_p), capital share(Psi_p), return volatility(sig_qk_p, sig_qf_p), grid points(zi,fi)
+        Output: new values from Newton-Rhaphson method
+        '''
         i_p = (q_p - 1)/self.params['kappa']
         eq1 = (self.f[fi]-self.params['aH'])/q_p -\
                 self.params['alpha'] * self.Jtilde_z[zi,fi]*(self.params['alpha'] * Psi_p - self.z_mat[zi,fi])*(sig_qk_p**2 + sig_qf_p**2 + 2*self.params['corr']*sig_qk_p*sig_qf_p) - self.params['alpha']* self.Jtilde_f[zi,fi]*self.sig_f[zi,fi]*sig_qf_p -\
@@ -104,6 +117,11 @@ class model_nnpde():
         del ER, QN
         return EN
     def equations_region2(self,q_p,sig_qk_p,sig_qf_p,zi,fi):
+        '''
+        Solves for the equilibrium policy in the normal region 
+        Input: old values of capital price(q_p), return volatility(sig_qk_p,sig_qf_p), grid points(zi,fi)
+        Output: new values from Newton-Rhaphson method
+        '''
         i_p = (q_p-1)/self.params['kappa']
         eq1 = (self.params['rhoE']*self.z_mat[zi,fi] + self.params['rhoH']*(1-self.z_mat[zi,fi])) * q_p  - (self.f[fi] - i_p)
         eq2 = sig_qk_p - sig_qk_p*(self.chi[zi,fi]-self.z_mat[zi,fi])/self.dz[zi-1] + (sig_qk_p)*self.q[zi-1,fi]/(q_p*self.dz[zi-1])*(self.chi[zi,fi] - self.z_mat[zi,fi]) - self.params['sigma']
@@ -126,6 +144,7 @@ class model_nnpde():
         return EN
     
     def solve(self,pde='True'):
+        #main iteration
         self.psi[0,:]=0
         self.q[0,:] = (1 + self.params['kappa']*(self.params['aH'] + self.psi[0,:]*(self.f-self.params['aH'])))/(1 + self.params['kappa']*(self.params['rhoH'] + self.z[0] * (self.params['rhoE'] - self.params['rhoH'])));
         self.chi[0,:] = 0;
@@ -447,7 +466,9 @@ class model_nnpde():
             print('Algorithm terminated without convergence after {} time steps.'.format(timeStep));
     
     def plots_(self):
-        
+        '''
+        2D plots of the equilibrium quantities
+        '''
         plot_path = '../output/plots/extended/'
         index1 = np.where(self.f==min(self.f, key=lambda x:abs(x-self.params['f_l'])))[0][0]
         index2=  np.where(self.f==min(self.f, key=lambda x:abs(x-(self.params['f_l']+self.params['f_u'])/2)))[0][0]
@@ -477,6 +498,9 @@ class model_nnpde():
             
             
     def surf_plot_(self, var):
+        '''
+        3D plots of the equilibrium quantities
+        '''
         plot_path = '../output/plots/extended/'
         vars = ['self.q','self.theta','self.thetah','self.psi','self.ssq','self.mu_z','self.sig_za','self.priceOfRiskE','self.priceOfRiskH']
         labels = ['$q$','$\theta_{e}$','$\theta_{h}$','$\psi$','$\sigma + \sigma^q$','$\mu^z$','$\sigma^z$','$\zeta_{e}$', '$\zeta_{h}$']
@@ -512,20 +536,15 @@ if __name__ =="__main__":
     params['beta_f'] = 0.25/params['sigma']
     
     ext = model_nnpde(params)
-    #ext.maxIterations=4
     ext.solve(pde='True')  
     ext.plots_()
-    if False:
+    if False: #set this to True if you want to store the pickles
         def pickle_stuff(object_name,filename):
             with open(filename,'wb') as f:
                 dill.dump(object_name,f)
         pickle_stuff(ext,  'ext_boundarypoints' + '.pkl')
         
-    if False:
-        def read_pickle(filename):
-            with open(str(filename) + '.pkl', 'rb') as f:
-                return dill.load(f)
-        ext1 = read_pickle('ext2_works_final')
+    
     
     
     

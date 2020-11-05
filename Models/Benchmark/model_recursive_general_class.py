@@ -28,7 +28,7 @@ nsim: number of simulations to run
 class model_recursive_general():
     '''
     This class solves the baseline model with recursive utility and IES!=1 from the paper 
-    'Confronting Macro-finance model with Data (2020). 
+    'Asset Pricing with Realistic Crisis Dynamics (2020)'
     '''
     def __init__(self, params):
         self.params = params    
@@ -159,7 +159,7 @@ class model_recursive_general():
             for i in range(1,self.Nz):
                   
                   if self.psi[i-1] >= 1:
-                	      break; #if we have reached boundary of psi<=1, have to continue differently...
+                	      break; 
                   if i==1:
 
                     q_init, Psi_init, sig_ka_init = self.initialize_()  
@@ -185,11 +185,10 @@ class model_recursive_general():
                 self.q[i] = self.equations_region2(self.q[i-1],i)
 
             
-            self.chi[self.thresholdIndex:] = np.maximum(self.z[self.thresholdIndex:],self.params['alpha']).reshape(-1,1); #NOTE: this seems incorrect for gammaE~=gammaH!
-            #self.iota[self.thresholdIndex:] = 1 + self.params['kappa']* self.q[self.thresholdIndex:];
+            self.chi[self.thresholdIndex:] = np.maximum(self.z[self.thresholdIndex:],self.params['alpha']).reshape(-1,1); 
             self.iota[self.thresholdIndex:] = (self.q[self.thresholdIndex:]-1)/self.params['kappa']
             if self.thresholdIndex==0:
-                self.dq[self.thresholdIndex:-1] = (self.q[1:] - np.vstack([self.q0,self.q[0:-2]])) / (self.z - np.vstack([0,self.z[:-2]])) #needs fixing
+                self.dq[self.thresholdIndex:-1] = (self.q[1:] - np.vstack([self.q0,self.q[0:-2]])) / (self.z - np.vstack([0,self.z[:-2]])) 
             else:
                 self.dq[self.thresholdIndex:] = (self.q[self.thresholdIndex:]- self.q[self.thresholdIndex-1:-1]).reshape(-1,1)/(self.z[self.thresholdIndex:]-self.z[self.thresholdIndex-1:-1]).reshape(-1,1);
             self.ssq[self.thresholdIndex:] = self.params['sigma']/(1-self.dq[self.thresholdIndex:]/self.q[self.thresholdIndex:] * (self.chi[self.thresholdIndex:]-self.z[self.thresholdIndex:].reshape(-1,1)));
@@ -197,14 +196,14 @@ class model_recursive_general():
             self.theta = (self.chi)/self.z.reshape(-1,1)
             self.thetah = (1-self.chi)/(1-self.z.reshape(-1,1))
             self.Phi = (np.log(self.q))/self.params['kappa']
-            # (3) time step preparations
+            
 
             self.qz[1:self.Nz,:]  = (self.q [1:self.Nz,:] - self.q [0:self.Nz-1,:])/self.dz_mat; self.qz[0,:]=self.qz[1,:];
             self.qzz[2:self.Nz,:] = (self.q[2:self.Nz,:] + self.q[0:self.Nz-2,:] - 2.*self.q[1:self.Nz-1,:])/(self.dz2.reshape(-1,1)); self.qzz[0,:]=self.qzz[2,:]; self.qzz[1,:]=self.qzz[2,:]; 
             self.qzl  = self.qz/self.q ; 
             self.qzzl = self.qzz/ self.q;
 
-            self.sig_za = (self.chi - self.z.reshape(-1,1))*self.ssq; #sig_za := \sigma^\z \z, similary mu_z
+            self.sig_za = (self.chi - self.z.reshape(-1,1))*self.ssq; 
             self.priceOfRiskE = (1/self.z.reshape(-1,1) - self.dLogJe.reshape(-1,1)) * self.sig_za + self.ssq + (self.params['gammaE']-1) * self.params['sigma'];
             self.priceOfRiskH = -(1/(1-self.z.reshape(-1,1)) + self.dLogJh.reshape(-1,1))*self.sig_za + self.ssq + (self.params['gammaH']-1) * self.params['sigma'];
             self.sig_je = self.dLogJe.reshape(-1,1) * (self.sig_za.reshape(-1,1))
@@ -256,21 +255,15 @@ class model_recursive_general():
             self.AminusIota = self.psi*(self.params['aE'] - self.iota) + (1-self.psi) * (self.params['aH'] - self.iota)
             self.pd = np.log(self.q / self.AminusIota) #log pd ratio
             # PDE time steps
-            # (a) common terms in both PDEs
-            # (b) experts
             self.linearTermE = (self.params['gammaE']-1)/(1-1/self.params['IES']) * ((self.q.reshape(-1,1)*self.z_mat)**(self.params['IES']-1) * self.Je.reshape(-1,1)**((1-self.params['IES'])/(1-self.params['gammaE'])) - self.params['rhoE']) - \
-                        (1-self.params['gammaE']) * (self.growthRate - self.params['gammaE']*self.params['sigma']**2 *0.5 + self.params['sigma'] * self.sig_je); #PDE coefficient multiplying v(\z)
-            
-            # solve PDE
-            
+                        (1-self.params['gammaE']) * (self.growthRate - self.params['gammaE']*self.params['sigma']**2 *0.5 + self.params['sigma'] * self.sig_je); 
             dt = 0.8
             newJe = hjb_implicit_policy(self.z,self.linearTermE,self.mu_z,self.sig_za,0,self.Je,dt).reshape(-1)
            
            
-            # (c) households
+            
             self.linearTermH = (self.params['gammaH']-1)/(1-1/self.params['IES']) * ((self.q.reshape(-1,1)*(1-self.z_mat))**(self.params['IES']-1) * self.Jh.reshape(-1,1)**((1-self.params['IES'])/(1-self.params['gammaH'])) - self.params['rhoH']) - \
                         (1-self.params['gammaH']) * (self.growthRate - self.params['gammaH']*self.params['sigma']**2/2 + self.params['sigma']*self.sig_jh)
-            # solve PDE
             newJh = hjb_implicit_policy(self.z,self.linearTermH,self.mu_z,self.sig_za,0,self.Jh,dt).reshape(-1)
             newJe[0] = newJe[1]
             newJh[0] = newJh[1]
