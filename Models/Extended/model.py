@@ -1,5 +1,3 @@
-import sys
-sys.path.insert(0, '../')
 from scipy.optimize import fsolve
 from pylab import plt
 plt.style.use('seaborn')
@@ -18,7 +16,182 @@ plt.rcParams['grid.linewidth'] = 0
 import dill
 import tensorflow as tf
 import time
-from Extended.nnpde import nnpde_informed
+
+class nnpde_informed():
+    def __init__(self,linearTerm,advection_z,advection_f,diffusion_z,diffusion_f,cross_term,J0,X,layers,X_f,dt,tb,learning_rate,adam_iter):
+        
+        self.linearTerm = linearTerm
+        self.advection_z = advection_z
+        self.advection_y = advection_f
+        self.diffusion_z = diffusion_z
+        self.diffusion_y = diffusion_f
+        self.cross_term = cross_term
+        self.u = J0
+        self.X = X
+        self.layers = layers
+        self.t_b = tb
+        self.X_f = X_f
+        self.dt = dt
+        self.learning_rate = learning_rate
+        self.adam_iter = adam_iter
+        
+        self.z_u = self.X[:,0:1]
+        self.t_u = self.X[:,2:3]
+        self.z_f = self.X_f[:,0:1]
+        self.t_f = self.X_f[:,2:3]
+        self.y_u = self.X[:,1:2]
+        self.y_f = self.X_f[:,1:2]
+        
+        self.lb = np.array([0,self.y_u[0][0], self.dt])
+        self.ub = np.array([1,self.y_u[-1][0], 0])
+        #self.lb = 0
+        #self.ub = 1
+        
+        self.X_b = np.array([[self.z_u[0][0],self.y_u[0][0], 0],[self.z_u[0][0],self.y_u[0][0], self.dt],[self.z_u[-1][0],self.y_u[-1][0],0.],[self.z_u[-1][0],self.y_u[-1][0],self.dt]])
+        self.z_b = np.array(self.X_b[:,0]).reshape(-1,1)
+        self.y_b = np.array(self.X_b[:,1]).reshape(-1,1)
+        self.t_b = np.array(self.X_b[:,2]).reshape(-1,1)
+        #Initialize NNs
+        self.weights, self.biases = self.initialize_nn(layers)
+        
+        #tf placeholders and computational graph
+        self.sess = tf.Session(config = tf.ConfigProto(allow_soft_placement = True, log_device_placement = True))
+        self.z_u_tf = tf.placeholder(tf.float32,shape=[None,self.z_u.shape[1]])
+        self.y_u_tf = tf.placeholder(tf.float32,shape=[None,self.y_u.shape[1]])
+        self.t_u_tf = tf.placeholder(tf.float32,shape=[None,self.t_u.shape[1]])
+        self.u_tf = tf.placeholder(tf.float32, shape=[None,self.u.shape[1]])
+        
+        
+        self.z_b_tf =  tf.placeholder(tf.float32, shape=[None,self.z_b.shape[1]])
+        self.y_b_tf =  tf.placeholder(tf.float32, shape=[None,self.y_b.shape[1]])
+        self.t_b_tf =  tf.placeholder(tf.float32, shape=[None,self.t_b.shape[1]])
+        
+        self.z_f_tf = tf.placeholder(tf.float32, shape=[None,self.z_f.shape[1]])
+        self.y_f_tf = tf.placeholder(tf.float32, shape=[None,self.y_f.shape[1]])
+        self.t_f_tf = tf.placeholder(tf.float32, shape=[None,self.t_f.shape[1]])
+        
+        
+        self.u_pred,_,_ = self.net_u(self.z_u_tf,self.y_u_tf,self.t_u_tf)
+        self.f_pred = self.net_f(self.z_f_tf, self.y_f_tf,self.t_f_tf)
+        _, self.ub_z_pred, self.ub_y_pred = self.net_u(self.z_b_tf,self.y_b_tf,self.t_b_tf)
+        
+        
+        
+        self.loss = tf.reduce_mean(tf.square(self.u_tf-self.u_pred)) + \
+                        tf.reduce_mean(tf.square(self.f_pred))  #+\
+                        #tf.reduce_mean(tf.square(self.ub_y_pred)) #+\
+                        #tf.reduce_mean(tf.square(self.ub_z_pred)) #works even without this line for ies1 case
+                        
+                        
+                        
+        self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss,method='L-BFGS-B',
+                                                        options = {'maxiter': 50000,
+                                                                           'maxfun': 50000,
+                                                                           'maxcor': 50,
+                                                                           'maxls': 50,
+                                                                           'ftol': 1e-08})
+                                                                           
+        
+        self.optimizer_Adam = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+        self.train_op_Adam = self.optimizer_Adam.minimize(self.loss)
+        
+        init = tf.global_variables_initializer()
+        self.sess.run(init)
+
+    
+    def initialize_nn(self,layers):
+        weights = []
+        biases = []
+        num_layers = len(layers)
+        for l in range(num_layers-1):
+            W = self.xavier_init(size = [layers[l],layers[l+1]])
+            b = tf.Variable(tf.zeros([1,layers[l+1]], dtype=tf.float32), dtype = tf.float32)
+            weights.append(W)
+            biases.append(b)
+        
+        return weights,biases
+
+    
+    def xavier_init(self,size):
+        in_dim = size[0]
+        out_dim = size[1]
+        xavier_stddev = np.sqrt(2/(in_dim + out_dim))
+        try:
+            val = tf.Variable(tf.random.truncated_normal([in_dim,out_dim], stddev = xavier_stddev), dtype = tf.float32)
+        except:
+            val = tf.Variable(tf.truncated_normal([in_dim,out_dim], stddev = xavier_stddev), dtype = tf.float32)
+        return val
+    
+    def neural_net(self,X,weights,biases):
+        num_layers = len(weights) +1
+        H = 2.0*(X - self.lb)/(self.ub - self.lb) -1
+        #H=X
+        for l in range(num_layers-2):
+            W = weights[l]
+            b = biases[l]
+            H = tf.tanh(tf.add(tf.matmul(H,W),b))
+        W = weights[-1]
+        b = biases[-1]
+        Y = tf.add(tf.matmul(H,W),b)
+
+        return Y
+
+    def net_u(self,z,y,t):
+        X = tf.concat([z,y,t],1)
+        u = self.neural_net(X,self.weights,self.biases)
+        u_z = tf.gradients(u,z)[0]
+        u_y = tf.gradients(u,y)[0]
+        return u,u_z,u_y
+    
+    def net_f(self,z,y,t):
+        u,u_z,u_y = self.net_u(z,y,t)
+        u_t = tf.gradients(u,t)[0]
+        u_zz = tf.gradients(u_z,z)[0]
+        u_yy = tf.gradients(u_y,y)[0]
+        u_zy = tf.gradients(u_z,y)[0]
+        f =  u_t + self.diffusion_z * u_zz +  self.diffusion_y * u_yy + self.advection_y * u_y + self.advection_z * u_z + self.cross_term * u_zy -  self.linearTerm *u
+        #f = u_t + self.diffusion_z * u_zz + self.advection_z * u_z - self.linearTerm*u
+        return f
+    
+    def callback(self,loss):
+        print('Loss: ',loss)
+    
+    def train(self):
+        #K.clear_session()
+        tf_dict = {self.z_u_tf: self.z_u, self.y_u_tf: self.y_u, self.t_u_tf: self.t_u, self.u_tf:self.u,
+                    self.z_f_tf: self.z_f,self.y_f_tf: self.y_f, self.t_f_tf: self.t_f,
+                    self.z_b_tf: self.z_b,
+                    self.y_b_tf: self.y_b,
+                    self.t_b_tf: self.t_b}
+                 
+        start_time = time.time()
+        
+        if True: #set this to true if you want adam to run 
+            for it in range(self.adam_iter):
+                self.sess.run(self.train_op_Adam, tf_dict)
+                # Print
+                if it % 1000 == 0:
+                    elapsed = time.time() - start_time
+                    loss_value = self.sess.run(self.loss, tf_dict)
+                    print('It: %d, Loss: %.3e, Time: %.2f' % 
+                          (it, loss_value, elapsed))
+                    start_time = time.time()
+        
+            start_time = time.time()
+        self.optimizer.minimize(self.sess,feed_dict = tf_dict)
+        elapsed = time.time() - start_time
+        print('Time: %.2f' % elapsed)
+        #self.sess.close()
+
+
+    def predict(self, X_star):
+        u_star = self.sess.run(self.u_pred, {self.z_u_tf: X_star[:,0:1],self.y_u_tf: X_star[:,1:2], self.t_u_tf: X_star[:,2:3]})
+        #f_star = self.sess.run(self.f_pred, {self.z_f_tf: X_star[:,0:1],self.y_f_tf: X_star[:,1:2], self.t_f_tf: X_star[:,2:3]})
+        tf.reset_default_graph()
+        return u_star
+
+
+
 
 class model_nnpde():
     def __init__(self,params):
@@ -64,7 +237,8 @@ class model_nnpde():
         self.psi = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64) 
         
         self.maxIterations=150
-        self.convergenceCriterion = 1e-2;
+        if self.params['scale']>1: self.convergenceCriterion = 1e-2;
+        else: self.convergenceCriterion = 1e-2;
         self.converged = False
         self.Iter=0
         if not os.path.exists('../output'):
@@ -76,7 +250,7 @@ class model_nnpde():
         i_p = (q_p - 1)/self.params['kappa']
         eq1 = (self.f[fi]-self.params['aH'])/q_p -\
                 self.params['alpha'] * self.Jtilde_z[zi,fi]*(self.params['alpha'] * Psi_p - self.z_mat[zi,fi])*(sig_qk_p**2 + sig_qf_p**2 + 2*self.params['corr']*sig_qk_p*sig_qf_p) - self.params['alpha']* self.Jtilde_f[zi,fi]*self.sig_f[zi,fi]*sig_qf_p -\
-                self.params['sigma']*(sig_qk_p + self.params['corr']* sig_qf_p)*(self.gammaE - self.gammaH)
+                self.params['sigma']*(sig_qk_p + self.params['corr']* sig_qf_p)*(self.params['gammaE'] - self.params['gammaH'])
         eq2 = (self.params['rhoE']*self.z_mat[zi,fi] + self.params['rhoH']*(1-self.z_mat[zi,fi])) * q_p  - Psi_p * (self.f[fi] - i_p) - (1- Psi_p) * (self.params['aH'] - i_p)
               
         eq3 = sig_qk_p - sig_qk_p*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])/self.dz[zi-1] + (sig_qk_p)*self.q[zi-1,fi]/(q_p*self.dz[zi-1])*(self.params['alpha'] * Psi_p - self.z_mat[zi,fi]) - self.params['sigma']
@@ -89,8 +263,8 @@ class model_nnpde():
         ER = np.array([eq1,eq2,eq3,eq4])
         QN = np.zeros(shape=(4,4))
 
-        QN[0,:] = np.array([-self.params['alpha']**2 * self.Jtilde_z[zi,fi]*(sig_qk_p**2 + sig_qf_p**2 + sig_qk_p*sig_qf_p*self.params['corr']*2), -2*self.params['alpha']*self.Jtilde_z[zi,fi]*(self.params['alpha']* Psi_p-self.z_mat[zi,fi])*sig_qk_p - 2*self.params['alpha']*self.Jtilde_z[zi,fi]*self.params['corr']*(self.params['alpha']*Psi_p - self.z_mat[zi,fi])*sig_qf_p -self.params['sigma']*(self.gammaE-self.gammaH), \
-                            -2* self.params['alpha'] * self.Jtilde_z[zi,fi]*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])*sig_qf_p - self.Jtilde_f[zi,fi]*self.sig_f[zi,fi] - 2*self.params['corr']*self.params['alpha']*sig_qk_p - self.params['alpha']*self.params['sigma']*self.params['corr']*(self.gammaE - self.gammaH), -(self.f[fi]-self.params['aH'])/(q_p**2)])
+        QN[0,:] = np.array([-self.params['alpha']**2 * self.Jtilde_z[zi,fi]*(sig_qk_p**2 + sig_qf_p**2 + sig_qk_p*sig_qf_p*self.params['corr']*2), -2*self.params['alpha']*self.Jtilde_z[zi,fi]*(self.params['alpha']* Psi_p-self.z_mat[zi,fi])*sig_qk_p - 2*self.params['alpha']*self.Jtilde_z[zi,fi]*self.params['corr']*(self.params['alpha']*Psi_p - self.z_mat[zi,fi])*sig_qf_p -self.params['sigma']*(self.params['gammaE']-self.params['gammaH']), \
+                            -2* self.params['alpha'] * self.Jtilde_z[zi,fi]*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])*sig_qf_p - self.Jtilde_f[zi,fi]*self.sig_f[zi,fi] - 2*self.params['corr']*self.params['alpha']*sig_qk_p - self.params['alpha']*self.params['sigma']*self.params['corr']*(self.params['gammaE'] - self.params['gammaH']), -(self.f[fi]-self.params['aH'])/(q_p**2)])
         QN[1,:] = np.array([self.params['aH'] - self.f[fi], 0, 0,  self.params['rhoE'] * self.z_mat[zi,fi] + (1-self.z_mat[zi,fi])*self.params['rhoH'] + 1/self.params['kappa']])
         QN[2,:] = np.array([-sig_qk_p * self.params['alpha']/self.dz[zi-1]*(1-self.q[zi-1,fi]/q_p), 1-((self.params['alpha'] * Psi_p-self.z_mat[zi,fi])/self.dz[zi-1])*(q_p - self.q[zi-1,fi])/q_p, \
                                  0, -sig_qk_p*(self.q[zi-1,fi]/q_p**2)*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])/self.dz[zi-1]])
@@ -124,7 +298,10 @@ class model_nnpde():
         EN = np.array([sig_qk_p,sig_qf_p,q_p]) - np.linalg.solve(QN,ER)
         del ER,QN
         return EN
-
+    def pickle_stuff(self,object_name,filename):
+                    with open(filename,'wb') as f:
+                        dill.dump(object_name,f)
+    
     def solve(self,pde='True'):
         self.psi[0,:]=0
         self.q[0,:] = (1 + self.params['kappa']*(self.params['aH'] + self.psi[0,:]*(self.f-self.params['aH'])))/(1 + self.params['kappa']*(self.params['rhoH'] + self.z[0] * (self.params['rhoE'] - self.params['rhoH'])));
@@ -144,8 +321,12 @@ class model_nnpde():
             self.dLogJh_z = np.vstack([((self.logValueH[1,:]-self.logValueH[0,:])/(self.z_mat[1,:]-self.z_mat[0,:])).reshape(-1,self.Nf),(self.logValueH[2:,:]-self.logValueH[0:-2,:])/(self.z_mat[2:,:]-self.z_mat[0:-2,:]),((self.logValueH[-1,:]-self.logValueH[-2,:])/(self.z_mat[-1,:]-self.z_mat[-2,:])).reshape(-1,self.Nf)]);
             self.dLogJe_f = np.hstack([((self.logValueE[:,1]-self.logValueE[:,0])/(self.f_mat[:,1]-self.f_mat[:,0])).reshape(self.Nz,-1),(self.logValueE[:,2:]-self.logValueE[:,0:-2])/(self.f_mat[:,2:]-self.f_mat[:,0:-2]),((self.logValueE[:,-1]-self.logValueE[:,-2])/(self.f_mat[:,-1]-self.f_mat[:,-2])).reshape(self.Nz,1)]);
             self.dLogJh_f = np.hstack([((self.logValueH[:,1]-self.logValueH[:,0])/(self.f_mat[:,1]-self.f_mat[:,0])).reshape(self.Nz,1),(self.logValueH[:,2:]-self.logValueH[:,0:-2])/(self.f_mat[:,2:]-self.f_mat[:,0:-2]),((self.logValueH[:,-1]-self.logValueH[:,-2])/(self.f_mat[:,-1]-self.f_mat[:,-2])).reshape(self.Nz,1)]);
-            self.Jtilde_z = self.dLogJh_z - self.dLogJe_z + 1/(self.z_mat*(1-self.z_mat))
-            self.Jtilde_f = self.dLogJh_f - self.dLogJe_f
+            if self.params['scale']>1:
+                self.Jtilde_z = (1-self.params['gammaH'])*self.dLogJh_z - (1-self.params['gammaE'])*self.dLogJe_z + 1/(self.z_mat*(1-self.z_mat))
+                self.Jtilde_f = (1-self.params['gammaH'])*self.dLogJh_f - (1-self.params['gammaE'])*self.dLogJe_f
+            else:
+                self.Jtilde_z = self.dLogJh_z - self.dLogJe_z + 1/(self.z_mat*(1-self.z_mat))
+                self.Jtilde_f = self.dLogJh_f - self.dLogJe_f
 
             for fi in range(self.Nf):
                 for zi in range(1,self.Nz):
@@ -217,17 +398,18 @@ class model_nnpde():
             self.sig_jf_e = self.dLogJe_f*self.sig_f + self.dLogJe_z*self.sig_zf
             self.sig_jk_h = self.dLogJh_z*self.sig_zk
             self.sig_jf_h = self.dLogJh_f*self.sig_f + self.dLogJh_z*self.sig_zf
-            self.priceOfRiskE_k = -self.sig_jk_e + self.sig_zk/self.z_mat + self.ssq + (self.gammaE-1)*self.params['sigma']
-            self.priceOfRiskE_f = -self.sig_jf_e + self.sig_zf/self.z_mat + self.ssf
-            self.priceOfRiskH_k = -self.sig_jk_h - 1/(1-self.z_mat)*self.sig_zk + self.ssq + self.gammaH*self.params['sigma']
-            self.priceOfRiskH_f = -self.sig_jf_h - 1/(1-self.z_mat)*self.sig_zf + self.ssf
-            self.rp = self.priceOfRiskE_k*self.ssq + self.priceOfRiskE_f*self.ssf
-            self.rp_ = self.priceOfRiskH_k*self.ssq + self.priceOfRiskH_f*self.ssf
-            
+            self.priceOfRiskE_k = -(1-self.params['gammaE'])*self.sig_jk_e + self.sig_zk/self.z_mat + self.ssq + (self.params['gammaE']-1)*self.params['sigma']
+            self.priceOfRiskE_f = -(1-self.params['gammaE'])*self.sig_jf_e + self.sig_zf/self.z_mat + self.ssf
+            self.priceOfRiskH_k = -(1-self.params['gammaH'])*self.sig_jk_h - 1/(1-self.z_mat)*self.sig_zk + self.ssq + self.params['gammaH']*self.params['sigma']
+            self.priceOfRiskH_f = -(1-self.params['gammaH'])*self.sig_jf_h - 1/(1-self.z_mat)*self.sig_zf + self.ssf
             self.priceOfRiskE_hat1 = self.priceOfRiskE_k + self.params['corr']*self.priceOfRiskE_f
             self.priceOfRiskE_hat2 = self.params['corr']* self.priceOfRiskE_k + self.priceOfRiskE_f
             self.priceOfRiskH_hat1 = self.priceOfRiskH_k + self.params['corr']*self.priceOfRiskH_f
             self.priceOfRiskH_hat2 = self.params['corr']* self.priceOfRiskH_k + self.priceOfRiskH_f
+            
+            self.rp = self.ssq*self.priceOfRiskE_hat1 + self.ssf*self.priceOfRiskE_hat2
+            self.rp_ = self.ssq*self.priceOfRiskH_hat1 + self.ssf*self.priceOfRiskH_hat2
+            self.rp_1 = self.params['alpha']*self.rp + (1-self.params['alpha'])*self.rp_
             
             self.mu_z = self.z_mat*( (self.f_mat - self.iota)/self.q - self.consWealthRatioE + (self.theta-1)*(self.ssq*(self.priceOfRiskE_hat1 - self.ssq) + self.ssf*(self.priceOfRiskE_hat2 - self.ssf) - 2* self.params['corr'] * self.ssq*self.ssf ) + (1-self.params['alpha'])*(self.ssq*(self.priceOfRiskE_hat1 - self.priceOfRiskH_hat1) + self.ssf*(self.priceOfRiskE_hat2 - self.priceOfRiskH_hat2))) + self.params['lambda_d']*(self.params['zbar']-self.z_mat) - self.params['hazard_rate1']*self.z_mat - self.crisis_flag*self.params['hazard_rate2'] * self.z_mat
             for fi in range(self.Nf):
@@ -237,16 +419,9 @@ class model_nnpde():
                 except:
                     print('no crisis')
             
-            self.mu_f = self.pi*(self.params['f_avg'] - self.f_mat)
-            #self.mu_z[1,:]=self.mu_z[0,:]
-            #self.mu_f[0,:]=0
-            self.growthRate = np.log(self.q)/self.params['kappa'] -self.delta
+            self.mu_f = self.params['pi']*(self.params['f_avg'] - self.f_mat)
+            self.growthRate = np.log(self.q)/self.params['kappa'] -self.params['delta']
             self.sig_zk[0]=0 #latest change
-            #self.sig_zk[-1]=0
-            #self.sig_zf[0:2]=0
-            #self.sig_zf[-1]=0
-            #self.mu_z[0] = np.maximum(self.mu_z[0],0)
-            #self.mu_z[-1] = np.minimum(self.mu_z[-1],0)
             self.ssTotal = self.ssf + self.ssq
             self.sig_zTotal = self.sig_zk + self.sig_zf
             self.priceOfRiskETotal = self.priceOfRiskE_k + self.priceOfRiskE_f
@@ -254,8 +429,8 @@ class model_nnpde():
             self.Phi = np.log(self.q)/self.params['kappa']
             self.mu_q = self.qzl*self.mu_z + self.qfl*self.mu_f + 0.5*self.qzzl*(self.sig_zk**2 + self.sig_zf**2 + 2*self.params['corr']*self.sig_zk*self.sig_zf) +\
                     0.5*self.qffl*self.sig_f**2 + self.qfzl*(self.sig_zk*self.sig_f*self.params['corr'] + self.sig_zf * self.sig_f)
-            self.r = self.crisis_flag*(-self.rp_ + (self.params['aH'] - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma']*(self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf) +\
-                    (1-self.crisis_flag)*(-self.rp + (self.f_mat - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma'] * (self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf)
+            self.r = self.crisis_flag*(-self.rp_ + (self.params['aH'] - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma']*(self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf) +\
+                    (1-self.crisis_flag)*(-self.rp + (self.f_mat - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma'] * (self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf)
             
             for fi in range(self.Nf):
                 crisis_temp = np.where(self.crisis_flag[:,fi]==1.0)[0][-1]+1
@@ -265,42 +440,50 @@ class model_nnpde():
                     print('no crisis')
             self.A = self.psi*(self.f_mat) + (1-self.psi) * (self.params['aH'])
             self.AminusIota = self.psi*(self.f_mat - self.iota) + (1-self.psi) * (self.params['aH'] - self.iota)
+            self.rp_2 = self.AminusIota/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma']*(self.ssq-self.params['sigma'])+self.params['corr']*self.params['sigma']*self.ssf - self.r
             self.pd = np.log(self.q / self.AminusIota)
             self.vol = np.sqrt(self.ssq**2 + self.ssf**2)
-            scale = self.gammaE
-            self.mu_rH = (self.params['aH'] - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
-            self.mu_rE = (self.f_mat - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
-            self.Jhat_e = self.Je.copy().reshape(self.Nz,self.Nf)**(1/scale)
-            self.Jhat_h = self.Jh.copy().reshape(self.Nz,self.Nf)**(1/scale)
+            self.mu_rH = (self.params['aH'] - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
+            self.mu_rE = (self.f_mat - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
+            self.Jhat_e = self.Je.copy().reshape(self.Nz,self.Nf)
+            self.Jhat_h = self.Jh.copy().reshape(self.Nz,self.Nf)
             self.diffusion_z = 0.5*(self.sig_zk**2 + self.sig_zf**2 + 2*self.params['corr']*self.sig_zk*self.sig_zf)
             self.diffusion_f = 0.5*(self.sig_f)**2
-            self.advection_z_e = self.mu_z + (1-self.gammaE)*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
-            self.advection_f_e = self.mu_f + (1-self.gammaE)*self.params['corr']*self.params['sigma']*self.sig_f
-            self.advection_z_h = self.mu_z + (1-self.gammaH)*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
-            self.advection_f_h = self.mu_f + (1-self.gammaH)*self.params['corr']*self.params['sigma']*self.sig_f
+            if self.params['scale']>1:
+                self.advection_z_e = self.mu_z 
+                self.advection_f_e = self.mu_f 
+                self.advection_z_h = self.mu_z
+                self.advection_f_h = self.mu_f 
+                self.linearTermE = -(0.5*self.params['gammaE']*(self.sig_jk_e**2 + self.sig_jf_e**2 + 2*self.params['corr']*self.sig_jk_e*self.sig_jf_e + self.params['sigma']**2) -\
+                                    self.growthRate + (self.params['gammaE']-1)*(self.sig_jk_e*self.params['sigma'] + self.params['corr']*self.params['sigma']*self.sig_jf_e) -\
+                                    self.params['rhoE']*(np.log(self.params['rhoE']) - np.log(self.Jhat_e) + np.log(self.z_mat*self.q)))
+                self.linearTermH = -(0.5*self.params['gammaH']*(self.sig_jk_h**2 + self.sig_jf_h**2 + 2*self.params['corr']*self.sig_jk_h*self.sig_jf_h + self.params['sigma']**2) -\
+                                    self.growthRate + (self.params['gammaH']-1)*(self.sig_jk_h*self.params['sigma'] + self.params['corr']*self.params['sigma']*self.sig_jf_h) -\
+                                    self.params['rhoH']*(np.log(self.params['rhoH']) - np.log(self.Jhat_h) + np.log((1-self.z_mat)*self.q)))
+            else:
+                self.advection_z_e = self.mu_z + (1-self.params['gammaE'])*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
+                self.advection_f_e = self.mu_f + (1-self.params['gammaE'])*self.params['corr']*self.params['sigma']*self.sig_f
+                self.advection_z_h = self.mu_z + (1-self.params['gammaH'])*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
+                self.advection_f_h = self.mu_f + (1-self.params['gammaH'])*self.params['corr']*self.params['sigma']*self.sig_f            
+                self.linearTermE = (1-self.params['gammaE']) * (self.growthRate - 0.5*self.params['gammaE']*self.params['sigma']**2 +\
+                                  self.params['rhoE']*(np.log(self.params['rhoE']) + np.log(self.q*self.z_mat))) -  self.params['rhoE']* np.log(self.Je)
+                self.linearTermH = (1-self.params['gammaH']) * (self.growthRate - 0.5*self.params['gammaH']*self.params['sigma']**2  +\
+                                  self.params['rhoH']*(np.log(self.params['rhoH']) + np.log(self.q*(1-self.z_mat)))) -   self.params['rhoH'] * np.log(self.Jh)
+
             self.cross_term = self.sig_zk*self.sig_f*self.params['corr'] + self.sig_zf*self.sig_f
-            
-            
-            self.linearTermE = (1-self.gammaE) * (self.growthRate - 0.5*self.gammaE*self.params['sigma']**2 +\
-                              self.params['rhoE']*(np.log(self.params['rhoE']) + np.log(self.q*self.z_mat))) -  self.params['rhoE']* np.log(self.Je)
-            self.linearTermE = self.linearTermE/scale + (1-scale)/(2*scale**2)  * (self.sig_jk_e**2 + self.sig_jf_e**2 + 2*self.params['corr']*self.sig_jk_e*self.sig_jf_e)/self.Je**2
-            
-            self.linearTermH = (1-self.gammaH) * (self.growthRate - 0.5*self.gammaH*self.params['sigma']**2  +\
-                              self.params['rhoH']*(np.log(self.params['rhoH']) + np.log(self.q*(1-self.z_mat)))) -   self.params['rhoH'] * np.log(self.Jh)
-            self.linearTermH = self.linearTermH/scale  + (1-scale)*0.5/scale**2 * (self.sig_jk_h**2 + self.sig_jf_h**2 + 2*self.params['corr']*self.sig_jk_h*self.sig_jf_h)/self.Jh**2
-            
             #Time step
             #data prep
             if pde=='True':
-                
                 if self.amax < 0.1: 
                     learning_rate = 0.01
                     layers = [3, 30, 30, 1]
-                    self.dt = 2
+                    self.dt = 1.0
+                    adam_iter = 5000
                 else:
                     learning_rate = 0.01
                     layers = [3, 30,30, 1]
                     self.dt = 2
+                    adam_iter=5000
                 tb = np.vstack((0,self.dt)).astype(np.float32)
                 z_tile = np.tile(self.z,self.Nf)
                 f_tile = np.repeat(self.f,self.Nz)  
@@ -309,7 +492,7 @@ class model_nnpde():
                 x_star = np.vstack((z_tile,f_tile,np.full(z_tile.shape[0],0))).transpose()
                 Jhat_e0 = self.Jhat_e.transpose().flatten().reshape(-1,1)
                 Jhat_h0 = self.Jhat_h.transpose().flatten().reshape(-1,1)
-                X_f_plot = X_f.copy()
+                
                 #sample more points around crisis region
                 crisis_min,crisis_max = int(self.crisis.min()), int(self.crisis.max())
                 X_,X_f_ = X.copy(),X_f.copy()
@@ -341,15 +524,15 @@ class model_nnpde():
                 advection_z_h, advection_f_h = add_crisis_points(self.advection_z_h.transpose().reshape(-1,1)),add_crisis_points(self.advection_f_h.transpose().reshape(-1,1))
                 cross_term, linearTermE, linearTermH = add_crisis_points(self.cross_term.transpose().reshape(-1,1)),add_crisis_points(self.linearTermE.transpose().reshape(-1,1)),add_crisis_points(self.linearTermH.transpose().reshape(-1,1))
                 crisisPointsLength = X_.shape[0]-X.shape[0]
+                
                 np.random.seed(0)
-                idx1 = np.random.choice(X_.shape[0],3000,replace=False)
+                idx1 = np.random.choice(X_.shape[0],2500,replace=False)
                 idx2 = np.random.choice(np.arange(X_.shape[0]-crisisPointsLength,X_.shape[0]),500,replace=True)
                 idx3 = np.random.choice(boundary_points1, 200,replace=True)
                 idx4 = np.random.choice(boundary_points2, 200, replace=True)
                 idx = np.hstack((idx1,idx2,idx3,idx4))
                 #idx = np.arange(0,X.shape[0])
                 X_, X_f_, Jhat_e0_, Jhat_h0_ = X_[idx], X_f_[idx], Jhat_e0_[idx], Jhat_h0_[idx]
-                
                 diffusion_z_tile = diffusion_z.reshape(-1)[idx]
                 diffusion_f_tile = diffusion_f.reshape(-1)[idx]
                 advection_z_e_tile = advection_z_e.reshape(-1)[idx]
@@ -361,36 +544,36 @@ class model_nnpde():
                 linearTermH_tile = linearTermH.reshape(-1)[idx]
                 
                 #sovle the PDE
-                from nnpde_extended_v1 import nnpde_informed
-                model_E = nnpde_informed(-linearTermE_tile.reshape(-1,1), advection_z_e_tile.reshape(-1,1),advection_f_e_tile.reshape(-1,1), diffusion_z_tile.reshape(-1,1),diffusion_f_tile.reshape(-1,1),cross_term_tile.reshape(-1,1), Jhat_e0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate)
+                model_E = nnpde_informed(-linearTermE_tile.reshape(-1,1), advection_z_e_tile.reshape(-1,1),advection_f_e_tile.reshape(-1,1), diffusion_z_tile.reshape(-1,1),diffusion_f_tile.reshape(-1,1),cross_term_tile.reshape(-1,1), Jhat_e0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate,adam_iter)
                 model_E.train()
                 newJeraw = model_E.predict(x_star)
                 model_E.sess.close()
                 newJe = newJeraw.transpose().reshape(self.Nf,self.Nz).transpose()
-                del model_E, nnpde_informed
+                del model_E
                 
-                from nnpde_extended_v1 import nnpde_informed
-                model_H = nnpde_informed(-linearTermH_tile.reshape(-1,1), advection_z_h_tile.reshape(-1,1),advection_f_h_tile.reshape(-1,1), diffusion_z_tile.reshape(-1,1),diffusion_f_tile.reshape(-1,1),cross_term_tile.reshape(-1,1), Jhat_h0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate)
+                
+                model_H = nnpde_informed(-linearTermH_tile.reshape(-1,1), advection_z_h_tile.reshape(-1,1),advection_f_h_tile.reshape(-1,1), diffusion_z_tile.reshape(-1,1),diffusion_f_tile.reshape(-1,1),cross_term_tile.reshape(-1,1), Jhat_h0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate,adam_iter)
                 model_H.train()
                 newJhraw = model_H.predict(x_star)
                 model_H.sess.close()
                 newJh = newJhraw.transpose().reshape(self.Nf,self.Nz).transpose()
-                del nnpde_informed 
                 
-                self.ChangeJe = np.abs(newJe - self.Je**(1/scale))
-                self.ChangeJh = np.abs(newJh - self.Jh**(1/scale))
-                cutoff = 10
-                #self.relChangeJe = np.abs(newJe[cutoff:-cutoff,:].reshape(-1) - self.Je[cutoff:-cutoff,:].reshape(-1)**(1/scale)) / (np.abs(newJe[cutoff:-cutoff,:].reshape(-1)) + np.abs(self.Je[cutoff:-cutoff,:].reshape(-1)**(1/scale)))*2/self.dt
-                #self.relChangeJh = np.abs(newJh[cutoff:-cutoff,:].reshape(-1) - self.Jh[cutoff:-cutoff,:].reshape(-1)**(1/scale)) / (np.abs(newJh[cutoff:-cutoff,:].reshape(-1)) + np.abs(self.Jh[cutoff:-cutoff,:].reshape(-1)**(1/scale)))*2/self.dt
-                self.relChangeJe = np.abs((newJe[cutoff:-cutoff,:].reshape(-1) - self.Je[cutoff:-cutoff,:].reshape(-1)**(1/scale)) / (self.Je[cutoff:-cutoff,:].reshape(-1)**(1/scale)))
-                self.relChangeJh = np.abs((newJh[cutoff:-cutoff,:].reshape(-1) - self.Jh[cutoff:-cutoff,:].reshape(-1)**(1/scale)) / (self.Jh[cutoff:-cutoff,:].reshape(-1)**(1/scale)))
+                self.ChangeJe = np.abs(newJe - self.Je)
+                self.ChangeJh = np.abs(newJh - self.Jh)
+                if self.params['scale']>1: cutoff = 1
+                else: cutoff=10
+                self.relChangeJe = np.abs((newJe[cutoff:-cutoff,:] - self.Je[cutoff:-cutoff,:]) / self.Je[cutoff:-cutoff,:])
+                self.relChangeJh = np.abs((newJh[cutoff:-cutoff,:] - self.Jh[cutoff:-cutoff,:]) / self.Jh[cutoff:-cutoff,:])
                 #break if nan values
                 if np.sum(np.isnan(newJe))>0 or np.sum(np.isnan(newJh))>0:
                     print('NaN values found in Value function')
                     break
-                self.Jh = newJh.reshape(self.Nz,self.Nf)**(scale)
-                self.Je = newJe.reshape(self.Nz,self.Nf)**(scale)
-                self.amax = np.maximum(np.amax(self.relChangeJe),np.amax(self.relChangeJh))
+                self.Jh = newJh
+                self.Je = newJe
+                if self.params['scale']>1:
+                    self.amax = np.maximum(np.amax(self.ChangeJe),np.amax(self.ChangeJh))
+                else:
+                    self.amax = np.maximum(np.amax(self.relChangeJe),np.amax(self.relChangeJh))
                 del model_H
                 
                 if self.amax < self.convergenceCriterion:
@@ -399,125 +582,26 @@ class model_nnpde():
                 elif len(self.amax_vec)>1 and np.abs(self.amax - self.amax_vec[-1])>0.5:
                     print('check inner loop. amax error is very large: ',self.amax)
                     break
-                print('Absolute max of relative error: ',self.amax)
+                print('Iteration number and Absolute max of relative error: ',self.Iter,',',self.amax)
                 self.amax_vec.append(self.amax)
-                
-                def plot_grid(data,name):
-                    mypoints = []
-                    mypoints.append([data[:,0],data[:,1],data[:,2]])
-                    
-                    data = list(zip(*mypoints))           # use list(zip(*mypoints)) with py3k  
-                    
-                    fig = pyplot.figure()
-                    ax = fig.add_subplot(111, projection='3d')
-                    ax.scatter(data[0], data[1],data[2])
-                    ax.set_xlabel('\n' +'Wealth Share (z)',fontsize=15)
-                    ax.set_ylabel('\n' +'Productivity (a)',fontsize=15)
-                    ax.set_zlabel('\n' +'Time (t)')
-                    ax.set_xlim3d(0,1)
-                    ax.set_zlim3d(0,self.dt)
-                    ax.set_ylim3d(self.params['f_l'],self.params['f_u'])
-                    ax.set_title(name,fontsize=20)
-                    pyplot.show()
-                    fig.savefig(plot_path + str(name) +'.png')
-                if self.Iter == 1:
-                    plt.style.use('classic')
-                    if not os.path.exists('../output/plots/extended/'):
-                        os.mkdir('../output/plots/extended/')
-                    plot_path = '../output/plots/extended/'
-                    plot_grid(X_f_plot,'Full grid')
-                    plot_grid(X_f_,'Training sample')
-                    plt.style.use('seaborn')        
-            else:
-                break
-
-            print('Iteration no: ',self.Iter )
-        if self.converged == 'True':
-            print('Algortihm converged after {} time steps.\n'.format(timeStep));
-        else:
-            print('Algorithm terminated without convergence after {} time steps.'.format(timeStep));
-    
-    def plots_(self):
-        
-        plot_path = '../output/plots/extended/'
-        index1 = np.where(self.f==min(self.f, key=lambda x:abs(x-self.params['f_l'])))[0][0]
-        index2=  np.where(self.f==min(self.f, key=lambda x:abs(x-(self.params['f_l']+self.params['f_u'])/2)))[0][0]
-        index3 = np.where(self.f==min(self.f, key=lambda x:abs(x-self.params['f_u'])))[0][0]
-        
-        vars = ['self.q','self.theta','self.thetah','self.psi','self.ssq','self.ssf','self.mu_z','self.sig_zk','self.sig_zf','self.priceOfRiskE_k','self.priceOfRiskE_f','self.priceOfRiskH_k','self.priceOfRiskH_f','self.rp','self.vol']
-        labels = ['q','$\theta_{e}$','$\theta_{h}$','$\psi$','$\sigma + \sigma^{q,k}$','\sigma^{q,a}', '$\mu^z$','$\sigma^{z,k}$','$\sigma^{z,f}$','$\zeta_{e}^k$', '$\zeta_{e}^f$','$\zeta_{h}^k$','$\zeta_{h}^f$','$\mu_e^R -r$','$\norm{\sigma^R}$']
-        title = ['Price','Portfolio Choice: Experts', 'Portfolio Choice: Households',\
-                     'Capital Share: Experts', 'Price return diffusion (capital shock)','Price return diffusion (productivity shock)','Drift of wealth share: Experts',\
-                     'Diffusion of wealth share (capital shock)','Diffusion of wealth share (productivity shock)', 'Experts price of risk: capital shock','Experts price of risk: productivity shock',\
-                     'Household price of risk: capital shock','Household price of risk: productivity shock','Risk premium']
-        
-        for i in range(len(vars)):
-            plt.plot(self.z[1:],eval(vars[i])[1:,index1],label=r'$a_e$={i}'.format(i=str(round(self.f[int(index1)],2))))
-            plt.plot(self.z[1:],eval(vars[i])[1:,int(index2)],label='$a_e$={i}'.format(i= str(round(self.f[int(index2)]))))
-            plt.plot(self.z[1:],eval(vars[i])[1:,int(index3)],label='$a_e$={i}'.format(i= str(round(self.f[int(index3)],2))),color='b') 
-            plt.grid(True)
-            plt.legend(loc=0)
-            #plt.axis('tight')
-            plt.xlabel('Wealth share (z)')
-            plt.ylabel(labels[i])
-            plt.title(title[i],fontsize = 20)
-            plt.rc('legend', fontsize=15) 
-            plt.rc('axes',labelsize = 15)
-            plt.savefig(plot_path + str(vars[i]).replace('self.','') + '_extended.png')
-            plt.figure()
-            
-            
-    def surf_plot_(self, var):
-        plot_path = '../output/plots/extended/'
-        vars = ['self.q','self.theta','self.thetah','self.psi','self.ssq','self.mu_z','self.sig_za','self.priceOfRiskE','self.priceOfRiskH']
-        labels = ['$q$','$\theta_{e}$','$\theta_{h}$','$\psi$','$\sigma + \sigma^q$','$\mu^z$','$\sigma^z$','$\zeta_{e}$', '$\zeta_{h}$']
-        title = ['Price','Portfolio Choice: Experts', 'Portfolio Choice: Households',\
-                     'Capital Share: Experts', 'Return volatility','Drift of wealth share: Experts',\
-                     'Volatility of wealth share: Experts', 'Market price of risk: Experts',\
-                     'Market price of risk: Households']
-        
-        y= self.z
-        x= self.f
-        X,Y = np.meshgrid(x,y)
-        for i in range(len(vars)):
-            fig = plt.figure()
-            ax = fig.gca(projection='3d')
-            Z= eval(vars[i])
-            my_col = cm.jet(Z/np.amax(Z))
-            surf = ax.plot_surface(X, Y, Z, facecolors = my_col)
-            ax.tick_params(axis='both', which='major', pad=2)
-            rcParams['axes.labelpad'] = 10.0
-            ax.set_xlabel('Productivity')
-            ax.set_ylabel('Wealth share')
-            ax.set_zlabel(labels[i])
-            ax.view_init(30, -30)
-            plt.title(title[i])
-            plt.savefig(plot_path + str(vars[i]).replace('self.','') + '_extended_3d.png')
+                self.pickle_stuff(self,'model2D' + '.pkl') 
             
 if __name__ =="__main__":
-    params={'rhoE': 0.05, 'rhoH': 0.05, 'aH': 0.02,'aE':0.11,
+    params={'rhoE': 0.05, 'rhoH': 0.05, 'aH': 0.02,
             'alpha':0.65, 'kappa':5, 'delta':0.05, 'zbar':0.1, 
-            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5, 'corr':1.0,
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':4, 'gammaH':4, 'corr':1,
              'pi' : 0.01, 'f_u' : 0.2, 'f_l' : 0.1, 'f_avg': 0.15,
-            'hazard_rate1' :0.06, 'hazard_rate2':0.4};params['beta_f'] = 0.25/params['sigma']
-    
-    ext = extended_nnpde(params)
-    #ext.maxIterations=4
+            'hazard_rate1' :0.06, 'hazard_rate2':0.35,'scale':2}
+    params['beta_f'] = 0.25/params['sigma']
+
+    ext = model_nnpde(params)
     ext.solve(pde='True')  
     ext.plots_()
     if False:
-        import dill
         def pickle_stuff(object_name,filename):
             with open(filename,'wb') as f:
                 dill.dump(object_name,f)
-        pickle_stuff(ext,  'ext_boundarypoints' + '.pkl')
-        
-    if False:
-        def read_pickle(filename):
-            with open(str(filename) + '.pkl', 'rb') as f:
-                return dill.load(f)
-        ext1 = read_pickle('ext2_works_final')
-    
+        pickle_stuff(ext,  'ext_mac' + '.pkl')
     
     
     

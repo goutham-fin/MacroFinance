@@ -1,5 +1,6 @@
 from scipy.optimize import fsolve
-from pylab import plt
+#from pylab import plt
+import matplotlib.pyplot as plt
 plt.style.use('seaborn')
 import matplotlib as mpl
 mpl.rcParams['font.family'] = 'serif'
@@ -239,8 +240,8 @@ class model_nnpde():
         self.convergenceCriterion = 1e-2;
         self.converged = False
         self.Iter=0
-        if not os.path.exists('../output'):
-            os.mkdir('../output')
+        #if not os.path.exists('../output'):
+        #    os.mkdir('../output')
         self.amax = np.float('Inf')
         self.amax_vec=[]
         
@@ -248,7 +249,7 @@ class model_nnpde():
         i_p = (q_p - 1)/self.params['kappa']
         eq1 = (self.f[fi]-self.params['aH'])/q_p -\
                 self.params['alpha'] * self.Jtilde_z[zi,fi]*(self.params['alpha'] * Psi_p - self.z_mat[zi,fi])*(sig_qk_p**2 + sig_qf_p**2 + 2*self.params['corr']*sig_qk_p*sig_qf_p) - self.params['alpha']* self.Jtilde_f[zi,fi]*self.sig_f[zi,fi]*sig_qf_p -\
-                self.params['sigma']*(sig_qk_p + self.params['corr']* sig_qf_p)*(self.gammaE - self.gammaH)
+                self.params['sigma']*(sig_qk_p + self.params['corr']* sig_qf_p)*(self.params['gammaE'] - self.params['gammaH'])
         eq2 = (self.params['rhoE']*self.z_mat[zi,fi] + self.params['rhoH']*(1-self.z_mat[zi,fi])) * q_p  - Psi_p * (self.f[fi] - i_p) - (1- Psi_p) * (self.params['aH'] - i_p)
               
         eq3 = sig_qk_p - sig_qk_p*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])/self.dz[zi-1] + (sig_qk_p)*self.q[zi-1,fi]/(q_p*self.dz[zi-1])*(self.params['alpha'] * Psi_p - self.z_mat[zi,fi]) - self.params['sigma']
@@ -261,8 +262,8 @@ class model_nnpde():
         ER = np.array([eq1,eq2,eq3,eq4])
         QN = np.zeros(shape=(4,4))
 
-        QN[0,:] = np.array([-self.params['alpha']**2 * self.Jtilde_z[zi,fi]*(sig_qk_p**2 + sig_qf_p**2 + sig_qk_p*sig_qf_p*self.params['corr']*2), -2*self.params['alpha']*self.Jtilde_z[zi,fi]*(self.params['alpha']* Psi_p-self.z_mat[zi,fi])*sig_qk_p - 2*self.params['alpha']*self.Jtilde_z[zi,fi]*self.params['corr']*(self.params['alpha']*Psi_p - self.z_mat[zi,fi])*sig_qf_p -self.params['sigma']*(self.gammaE-self.gammaH), \
-                            -2* self.params['alpha'] * self.Jtilde_z[zi,fi]*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])*sig_qf_p - self.Jtilde_f[zi,fi]*self.sig_f[zi,fi] - 2*self.params['corr']*self.params['alpha']*sig_qk_p - self.params['alpha']*self.params['sigma']*self.params['corr']*(self.gammaE - self.gammaH), -(self.f[fi]-self.params['aH'])/(q_p**2)])
+        QN[0,:] = np.array([-self.params['alpha']**2 * self.Jtilde_z[zi,fi]*(sig_qk_p**2 + sig_qf_p**2 + sig_qk_p*sig_qf_p*self.params['corr']*2), -2*self.params['alpha']*self.Jtilde_z[zi,fi]*(self.params['alpha']* Psi_p-self.z_mat[zi,fi])*sig_qk_p - 2*self.params['alpha']*self.Jtilde_z[zi,fi]*self.params['corr']*(self.params['alpha']*Psi_p - self.z_mat[zi,fi])*sig_qf_p -self.params['sigma']*(self.params['gammaE']-self.params['gammaH']), \
+                            -2* self.params['alpha'] * self.Jtilde_z[zi,fi]*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])*sig_qf_p - self.Jtilde_f[zi,fi]*self.sig_f[zi,fi] - 2*self.params['corr']*self.params['alpha']*sig_qk_p - self.params['alpha']*self.params['sigma']*self.params['corr']*(self.params['gammaE'] - self.params['gammaH']), -(self.f[fi]-self.params['aH'])/(q_p**2)])
         QN[1,:] = np.array([self.params['aH'] - self.f[fi], 0, 0,  self.params['rhoE'] * self.z_mat[zi,fi] + (1-self.z_mat[zi,fi])*self.params['rhoH'] + 1/self.params['kappa']])
         QN[2,:] = np.array([-sig_qk_p * self.params['alpha']/self.dz[zi-1]*(1-self.q[zi-1,fi]/q_p), 1-((self.params['alpha'] * Psi_p-self.z_mat[zi,fi])/self.dz[zi-1])*(q_p - self.q[zi-1,fi])/q_p, \
                                  0, -sig_qk_p*(self.q[zi-1,fi]/q_p**2)*(self.params['alpha'] * Psi_p-self.z_mat[zi,fi])/self.dz[zi-1]])
@@ -296,7 +297,9 @@ class model_nnpde():
         EN = np.array([sig_qk_p,sig_qf_p,q_p]) - np.linalg.solve(QN,ER)
         del ER,QN
         return EN
-
+    def pickle_stuff(self,object_name,filename):
+                    with open(filename,'wb') as f:
+                        dill.dump(object_name,f)
     def solve(self,pde='True'):
         self.psi[0,:]=0
         self.q[0,:] = (1 + self.params['kappa']*(self.params['aH'] + self.psi[0,:]*(self.f-self.params['aH'])))/(1 + self.params['kappa']*(self.params['rhoH'] + self.z[0] * (self.params['rhoE'] - self.params['rhoH'])));
@@ -389,18 +392,19 @@ class model_nnpde():
             self.sig_jf_e = self.dLogJe_f*self.sig_f + self.dLogJe_z*self.sig_zf
             self.sig_jk_h = self.dLogJh_z*self.sig_zk
             self.sig_jf_h = self.dLogJh_f*self.sig_f + self.dLogJh_z*self.sig_zf
-            self.priceOfRiskE_k = -self.sig_jk_e + self.sig_zk/self.z_mat + self.ssq + (self.gammaE-1)*self.params['sigma']
+            self.priceOfRiskE_k = -self.sig_jk_e + self.sig_zk/self.z_mat + self.ssq + (self.params['gammaE']-1)*self.params['sigma']
             self.priceOfRiskE_f = -self.sig_jf_e + self.sig_zf/self.z_mat + self.ssf
-            self.priceOfRiskH_k = -self.sig_jk_h - 1/(1-self.z_mat)*self.sig_zk + self.ssq + self.gammaH*self.params['sigma']
+            self.priceOfRiskH_k = -self.sig_jk_h - 1/(1-self.z_mat)*self.sig_zk + self.ssq + self.params['gammaH']*self.params['sigma']
             self.priceOfRiskH_f = -self.sig_jf_h - 1/(1-self.z_mat)*self.sig_zf + self.ssf
-            self.rp = self.priceOfRiskE_k*self.ssq + self.priceOfRiskE_f*self.ssf
-            self.rp_ = self.priceOfRiskH_k*self.ssq + self.priceOfRiskH_f*self.ssf
-            
             self.priceOfRiskE_hat1 = self.priceOfRiskE_k + self.params['corr']*self.priceOfRiskE_f
             self.priceOfRiskE_hat2 = self.params['corr']* self.priceOfRiskE_k + self.priceOfRiskE_f
             self.priceOfRiskH_hat1 = self.priceOfRiskH_k + self.params['corr']*self.priceOfRiskH_f
             self.priceOfRiskH_hat2 = self.params['corr']* self.priceOfRiskH_k + self.priceOfRiskH_f
+            self.rp = self.ssq*self.priceOfRiskE_hat1 + self.ssf*self.priceOfRiskE_hat2
+            self.rp_ = self.ssq*self.priceOfRiskH_hat1 + self.ssf*self.priceOfRiskH_hat2
+            self.rp_1 = self.params['alpha']*self.rp + (1-self.params['alpha'])*self.rp_
             
+
             self.mu_z = self.z_mat*( (self.f_mat - self.iota)/self.q - self.consWealthRatioE + (self.theta-1)*(self.ssq*(self.priceOfRiskE_hat1 - self.ssq) + self.ssf*(self.priceOfRiskE_hat2 - self.ssf) - 2* self.params['corr'] * self.ssq*self.ssf ) + (1-self.params['alpha'])*(self.ssq*(self.priceOfRiskE_hat1 - self.priceOfRiskH_hat1) + self.ssf*(self.priceOfRiskE_hat2 - self.priceOfRiskH_hat2))) + self.params['lambda_d']*(self.params['zbar']-self.z_mat) - self.params['hazard_rate1']*self.z_mat - self.crisis_flag*self.params['hazard_rate2'] * self.z_mat
             for fi in range(self.Nf):
                 crisis_temp = np.where(self.crisis_flag[:,fi]==1.0)[0][-1]+1
@@ -409,10 +413,10 @@ class model_nnpde():
                 except:
                     print('no crisis')
             
-            self.mu_f = self.pi*(self.params['f_avg'] - self.f_mat)
+            self.mu_f = self.params['pi']*(self.params['f_avg'] - self.f_mat)
             #self.mu_z[1,:]=self.mu_z[0,:]
             #self.mu_f[0,:]=0
-            self.growthRate = np.log(self.q)/self.params['kappa'] -self.delta
+            self.growthRate = np.log(self.q)/self.params['kappa'] -self.params['delta']
             self.sig_zk[0]=0 #latest change
             #self.sig_zk[-1]=0
             #self.sig_zf[0:2]=0
@@ -426,8 +430,8 @@ class model_nnpde():
             self.Phi = np.log(self.q)/self.params['kappa']
             self.mu_q = self.qzl*self.mu_z + self.qfl*self.mu_f + 0.5*self.qzzl*(self.sig_zk**2 + self.sig_zf**2 + 2*self.params['corr']*self.sig_zk*self.sig_zf) +\
                     0.5*self.qffl*self.sig_f**2 + self.qfzl*(self.sig_zk*self.sig_f*self.params['corr'] + self.sig_zf * self.sig_f)
-            self.r = self.crisis_flag*(-self.rp_ + (self.params['aH'] - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma']*(self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf) +\
-                    (1-self.crisis_flag)*(-self.rp + (self.f_mat - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma'] * (self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf)
+            self.r = self.crisis_flag*(-self.rp_ + (self.params['aH'] - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma']*(self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf) +\
+                    (1-self.crisis_flag)*(-self.rp + (self.f_mat - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma'] * (self.ssq-self.params['sigma']) + self.params['corr'] * self.params['sigma'] * self.ssf)
             
             for fi in range(self.Nf):
                 crisis_temp = np.where(self.crisis_flag[:,fi]==1.0)[0][-1]+1
@@ -437,27 +441,28 @@ class model_nnpde():
                     print('no crisis')
             self.A = self.psi*(self.f_mat) + (1-self.psi) * (self.params['aH'])
             self.AminusIota = self.psi*(self.f_mat - self.iota) + (1-self.psi) * (self.params['aH'] - self.iota)
+            self.rp_2 = self.AminusIota/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma']*(self.ssq-self.params['sigma'])+self.params['corr']*self.params['sigma']*self.ssf - self.r
             self.pd = np.log(self.q / self.AminusIota)
             self.vol = np.sqrt(self.ssq**2 + self.ssf**2)
-            scale = self.gammaE
-            self.mu_rH = (self.params['aH'] - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
-            self.mu_rE = (self.f_mat - self.iota)/self.q + self.Phi - self.delta + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
+            scale = self.params['gammaE']
+            self.mu_rH = (self.params['aH'] - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
+            self.mu_rE = (self.f_mat - self.iota)/self.q + self.Phi - self.params['delta'] + self.mu_q + self.params['sigma'] * (self.ssq - self.params['sigma'])
             self.Jhat_e = self.Je.copy().reshape(self.Nz,self.Nf)**(1/scale)
             self.Jhat_h = self.Jh.copy().reshape(self.Nz,self.Nf)**(1/scale)
             self.diffusion_z = 0.5*(self.sig_zk**2 + self.sig_zf**2 + 2*self.params['corr']*self.sig_zk*self.sig_zf)
             self.diffusion_f = 0.5*(self.sig_f)**2
-            self.advection_z_e = self.mu_z + (1-self.gammaE)*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
-            self.advection_f_e = self.mu_f + (1-self.gammaE)*self.params['corr']*self.params['sigma']*self.sig_f
-            self.advection_z_h = self.mu_z + (1-self.gammaH)*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
-            self.advection_f_h = self.mu_f + (1-self.gammaH)*self.params['corr']*self.params['sigma']*self.sig_f
+            self.advection_z_e = self.mu_z + (1-self.params['gammaE'])*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
+            self.advection_f_e = self.mu_f + (1-self.params['gammaE'])*self.params['corr']*self.params['sigma']*self.sig_f
+            self.advection_z_h = self.mu_z + (1-self.params['gammaH'])*(self.params['sigma']*self.sig_zk + self.params['sigma']*self.sig_zf)
+            self.advection_f_h = self.mu_f + (1-self.params['gammaH'])*self.params['corr']*self.params['sigma']*self.sig_f
             self.cross_term = self.sig_zk*self.sig_f*self.params['corr'] + self.sig_zf*self.sig_f
             
             
-            self.linearTermE = (1-self.gammaE) * (self.growthRate - 0.5*self.gammaE*self.params['sigma']**2 +\
+            self.linearTermE = (1-self.params['gammaE']) * (self.growthRate - 0.5*self.params['gammaE']*self.params['sigma']**2 +\
                               self.params['rhoE']*(np.log(self.params['rhoE']) + np.log(self.q*self.z_mat))) -  self.params['rhoE']* np.log(self.Je)
             self.linearTermE = self.linearTermE/scale + (1-scale)/(2*scale**2)  * (self.sig_jk_e**2 + self.sig_jf_e**2 + 2*self.params['corr']*self.sig_jk_e*self.sig_jf_e)/self.Je**2
             
-            self.linearTermH = (1-self.gammaH) * (self.growthRate - 0.5*self.gammaH*self.params['sigma']**2  +\
+            self.linearTermH = (1-self.params['gammaH']) * (self.growthRate - 0.5*self.params['gammaH']*self.params['sigma']**2  +\
                               self.params['rhoH']*(np.log(self.params['rhoH']) + np.log(self.q*(1-self.z_mat)))) -   self.params['rhoH'] * np.log(self.Jh)
             self.linearTermH = self.linearTermH/scale  + (1-scale)*0.5/scale**2 * (self.sig_jk_h**2 + self.sig_jf_h**2 + 2*self.params['corr']*self.sig_jk_h*self.sig_jf_h)/self.Jh**2
             
@@ -570,7 +575,7 @@ class model_nnpde():
                     break
                 print('Absolute max of relative error: ',self.amax)
                 self.amax_vec.append(self.amax)
-                
+                self.pickle_stuff(self,'extended_gpu' + '.pkl')
                 def plot_grid(data,name):
                     mypoints = []
                     mypoints.append([data[:,0],data[:,1],data[:,2]])
@@ -666,10 +671,9 @@ class model_nnpde():
 if __name__ =="__main__":
     params={'rhoE': 0.05, 'rhoH': 0.05, 'aH': 0.02,
             'alpha':0.65, 'kappa':5, 'delta':0.05, 'zbar':0.1, 
-            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5, 'corr':1.0,
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':4, 'gammaH':4, 'corr':1.0,
              'pi' : 0.01, 'f_u' : 0.2, 'f_l' : 0.1, 'f_avg': 0.15,
-            'hazard_rate1' :0.06, 'hazard_rate2':0.4}
-    params['beta_f'] = 0.25/params['sigma']
+            'hazard_rate1' :0.0575, 'hazard_rate2':0.4};params['beta_f'] = 0.25/params['sigma']
 
     ext = model_nnpde(params)
     ext.solve(pde='True')  
