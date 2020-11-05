@@ -1,5 +1,5 @@
-# Confronting Macro-Finance model with Data (2020)
-This GitHub repository contains code to solve the class of models from the paper Confronting Macro-Finance model with Data (2020). Please refer to the paper for the model framework. 
+# Asset Pricing with Realistic Crisis Dynamics (2020)
+This GitHub repository contains code to solve the class of models from the paper Asset Pricing with Realistic Crisis Dynamics (2020). Please refer to the paper for the model framework. 
 
 ## Requirements
 You need Python 3.5 or later to run the files. In Ubuntu, Mint and Debian you can install Python 3 like this:
