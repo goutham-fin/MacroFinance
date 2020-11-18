@@ -13,7 +13,14 @@ The following python packages need to be installed and imported: numpy 1.19.1, p
 ```
 pip install pandas
 ```
-
+(Optional) For solving models using active machine learning in both 1-D and higher dimensions, install Tensorflow 1.15. For users with GPU access, install like this
+```
+pip install tensorflow-gpu==1.15
+```
+For users with only CPU access, install like this
+```
+pip install tensorflow==1.15
+```
 ## Code description
 1) ```main.py```: Imports the simulation file and plots main figures in the paper.
 2) ```model_class.py```: Solves the incomplete-market capital mis-allocation model with CRRA utility function. Dependencies: ```finite_difference.py```. 
