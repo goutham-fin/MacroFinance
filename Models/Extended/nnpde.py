@@ -42,8 +42,7 @@ class nnpde_informed():
         
         self.lb = np.array([0,self.y_u[0][0], self.dt])
         self.ub = np.array([1,self.y_u[-1][0], 0])
-        #self.lb = 0
-        #self.ub = 1
+        
         
         self.X_b = np.array([[self.z_u[0][0],self.y_u[0][0], 0],[self.z_u[0][0],self.y_u[0][0], self.dt],[self.z_u[-1][0],self.y_u[-1][0],0.],[self.z_u[-1][0],self.y_u[-1][0],self.dt]])
         self.z_b = np.array(self.X_b[:,0]).reshape(-1,1)
@@ -76,9 +75,9 @@ class nnpde_informed():
         
         
         self.loss = tf.reduce_mean(tf.square(self.u_tf-self.u_pred)) + \
-                        tf.reduce_mean(tf.square(self.f_pred))  #+\
-                        #tf.reduce_mean(tf.square(self.ub_y_pred)) #+\
-                        #tf.reduce_mean(tf.square(self.ub_z_pred)) #works even without this line for ies1 case
+                        tf.reduce_mean(tf.square(self.f_pred))  +\
+                        0.001*tf.reduce_mean(tf.square(self.ub_y_pred)) +\
+                        0.001*tf.reduce_mean(tf.square(self.ub_z_pred)) 
                         
                         
                         
