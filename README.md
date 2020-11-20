@@ -1,5 +1,5 @@
-# Asset Pricing with Realistic Crisis Dynamics (2020)
-This GitHub repository contains code to solve the class of models from the paper Asset Pricing with Realistic Crisis Dynamics (2020). Please refer to the paper for the model framework. 
+# Asset Pricing with Realistic Crises Dynamics (2020)
+This GitHub repository contains code to solve the class of models from the paper Asset Pricing with Realistic Crises Dynamics (2020). Please refer to the paper for the model framework. 
 
 ## Requirements
 You need Python 3.5 or later to run the files. In Ubuntu, Mint and Debian you can install Python 3 like this:
@@ -13,7 +13,14 @@ The following python packages need to be installed and imported: numpy 1.19.1, p
 ```
 pip install pandas
 ```
-
+(Optional) For solving models using active machine learning in both 1-D and higher dimensions, install Tensorflow 1.15. For users with GPU access, install like this
+```
+pip install tensorflow-gpu==1.15
+```
+For users with only CPU access, install like this
+```
+pip install tensorflow==1.15
+```
 ## Code description
 1) ```main.py```: Imports the simulation file and plots main figures in the paper.
 2) ```model_class.py```: Solves the incomplete-market capital mis-allocation model with CRRA utility function. Dependencies: ```finite_difference.py```. 
@@ -37,28 +44,23 @@ pip install pandas
 ```python
 from model_recursive_class import model_recursive 
 from model_class import model 
-from model_general_class import model_general 
+from model_general_class import model_recursive_general 
 import matplotlib.pyplot as plt
 
-#Technology/preferences	
-rhoE = 0.05; rhoH = 0.05; sigma = 0.06; gammaE = 5; gammaH = 5; 
-IES = 1.5; aE = 0.1; aH = 0.03; kappa = 7; delta = 0.025; 
-#Demogrphics
-zbar = 0.1;   lambda_d = 0.015;
-#Frictions
-alpha=0.5;
+#Input parameters
+params={'rhoE': 0.06, 'rhoH': 0.03, 'aE': 0.11, 'aH': 0.03,
+            'alpha':0.5, 'kappa':7, 'delta':0.025, 'zbar':0.1, 
+            'lambda_d':0, 'sigma':0.06, 'gammaE':2, 'gammaH':2, 'IES=1.5'}
 
 #solve model1
-model1 = model_general(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, 
-			gammaH, IES, kappa, delta, lambda_d, zbar)
+model1 = model_recursive_general(params)
 model1.solve()
 
 #solve model2
 #switch to model with unitary IES
-IES =1.0
+params['IES'] =1.0
 #solve model
-model2 = model_recursive(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, 
-				gammaH, IES, kappa, delta, lambda_d, zbar)
+model2 = model_recursive(params)
 model2.solve()
 
 #plot capital price (Q) from the model1 and model2
@@ -70,26 +72,23 @@ from model_recursive_class import model_recursive
 from simulation_model_class import simulation_benchmark
 
 
-#Technology/preferences	
-rhoE = 0.05; rhoH = 0.05; sigma = 0.06; gammaE = 5; gammaH = 5; 
-IES = 1.5; aE = 0.1; aH = 0.03; kappa = 7; delta = 0.025; 
-#Demogrphics
-zbar = 0.1;   lambda_d = 0.015;
-#Frictions
-alpha=0.5;
+#Input parameters
+params={'rhoE': 0.06, 'rhoH': 0.03, 'aE': 0.11, 'aH': 0.03,
+            'alpha':0.5, 'kappa':7, 'delta':0.025, 'zbar':0.1, 
+            'lambda_d':0, 'sigma':0.06, 'gammaE':2, 'gammaH':2, 'IES=1.0'}
 #set number of simulations
-nsim = 500
-
+params['nsim'] = 500
+params['utility'] = 'recursive'
 #simulate model1
-simulate_model1 = simulation_benchmark(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, IES, kappa, delta, lambda_d, zbar,utility, nsim)
+simulate_model1 = simulation_benchmark(params)
 simulate_model1.compute_statistics()
 print(simulate_model1.stats) #print key statistics
 simulate_model1.write_files() #store key statistics for later use
 
 #simulate model2
-#change IES value
-IES =1.0
-simulate_model2 = simulation_benchmark(rhoE, rhoH, aE, aH, sigma, alpha, gammaE, gammaH, IES, kappa, delta, lambda_d, zbar,utility, nsim)
+#change volatility
+params['sigma'] =0.10
+simulate_model2 = simulation_benchmark(params)
 simulate_model2.compute_statistics()
 
 #compare stationary distribution from two models
