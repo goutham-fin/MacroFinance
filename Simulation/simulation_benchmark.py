@@ -38,7 +38,7 @@ class simulation_model():
     def __init__(self, params):
         self.params = params
         T = 5000
-        self.dt = 1/4
+        self.dt = 1/12
         self.t = np.arange(0,T,self.dt)
         self.burn_period = 1000/self.dt
         
@@ -64,7 +64,7 @@ class simulation_model():
                 self.bk.solve()
                 
             self.bk.solve()
-        self.z, self.crisis_z, self.mu_z, self.sig_za, self.sig_ka, self.iota, self.theta, self.thetah, self.rp, self.rp_, self.r, self.Q, self.rho, self.rho_, self.Phi, self.lambda_k, self.s_a = self.bk.z, self.bk.thresholdIndex, self.bk.mu_z, self.bk.sig_za, self.bk.ssq, self.bk.iota, \
+        self.z, self.crisis_z,self.mu_z, self.sig_za, self.sig_ka, self.iota, self.theta, self.thetah, self.rp, self.rp_, self.r, self.Q, self.rho, self.rho_, self.Phi, self.lambda_k, self.s_a = self.bk.z, self.bk.thresholdIndex, self.bk.mu_z, self.bk.sig_za, self.bk.ssq, self.bk.iota, \
                                                                self.bk.theta, self.bk.thetah, self.bk.rp, self.bk.rp_, self.bk.r, self.bk.q, self.bk.params['rhoE'], self.bk.params['rhoH'], self.bk.Phi, self.bk.params['delta'], self.bk.params['sigma']
         self.mrp = self.bk.priceOfRiskE
         self.mrph = self.bk.priceOfRiskH
@@ -100,11 +100,9 @@ class simulation_model():
         self.pd_fn = self.interpolate_var(self.pd[:,0])
         self.mure_fn = self.interpolate_var(self.mu_re[:,0])
 
-        
     def interpolate_var(self,var):
         return interp1d(self.z,var, kind='cubic')
          
-    
     def simulate(self):
         self.interpolate_values()
         #self.params['nsim'] = 3
@@ -377,17 +375,18 @@ class simulation_model():
 ###########################################################################################
 ###########################################################################################
 if __name__ == '__main__':
-    params={'rhoE': 0.05, 'rhoH': 0.05, 'aE': 0.11, 'aH': 0.03,
-            'alpha':0.75, 'kappa':7, 'delta':0.025, 'zbar':0.1, 
-            'lambda_d':0.03, 'sigma':0.06, 'gammaE':2, 'gammaH':2}
-    params['IES']=1.5; params['utility'] = 'recursive_general'; params['nsim']=3
+    params={'rhoE': 0.06, 'rhoH': 0.04, 'aE': 0.11, 'aH': 0.03,
+            'alpha':0.8, 'kappa':10, 'delta':0.02, 'zbar':0.1, 
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5}
+    params['IES']=1.0; params['utility'] = 'recursive'; params['nsim']=3
     params['load']=False
+    params['scale']=2
+    params['pickle_name']='model1D'
     sim1 = simulation_model(params)
     sim1.simulate()
     sim1.compute_statistics()
     #sim1.write_files()
     print(sim1.stats)
-    
     
     print(sim1.crisis_length_freq_mean)
     print(sim1.crisis_length_freq_data.quantile(0.1))
@@ -398,9 +397,9 @@ if __name__ == '__main__':
     plt.grid(False)
     plt.title('Crisis region')
     plt.xlabel('Wealth share')
-
     
-        
+    
+    
     
     
     

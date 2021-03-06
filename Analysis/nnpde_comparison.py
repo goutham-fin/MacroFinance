@@ -6,8 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import math
+import matplotlib.ticker as mticker
 
-from model_recursive_class import model_recursive
+from Benchmark.model_recursive_class import model_recursive
 from Benchmark.model_class import model
 from Benchmark.model_recursive_nnpde_class import model_recursive_nnpde
 
@@ -31,6 +32,7 @@ if __name__ == '__main__':
     plt.legend(loc=1,prop={'size': 15})
     plt.xlabel('Wealth share', fontsize=15)
     plt.ylabel('Drift of wealth share',fontsize=15)
+    plt.grid(b=None)
     plt.savefig('../output/plots/nnpde_comparison_mu_z.png')
     
     
@@ -40,6 +42,8 @@ if __name__ == '__main__':
     plt.legend(loc=4,prop={'size': 15})
     plt.xlabel('Wealth share', fontsize=15)
     plt.ylabel('Capital price',fontsize=15)
+    plt.ylim(1,1.5)
+    plt.grid(b=None)
     plt.savefig('../output/plots/nnpde_comparison_q.png')
     
     plt.figure()
@@ -49,6 +53,7 @@ if __name__ == '__main__':
     plt.xlabel('Wealth share', fontsize=15)
     plt.ylabel('Return volatility',fontsize=15)
     plt.ylim(0.05,0.25)
+    plt.grid(b=None)
     plt.savefig('../output/plots/nnpde_comparison_ssq.png')
     
     plt.figure()
@@ -58,9 +63,33 @@ if __name__ == '__main__':
     plt.xlabel('Wealth share', fontsize=15)
     plt.ylabel('Capital share',fontsize=15)
     plt.ylim(0.1,1.1)
+    plt.grid(b=None)
     plt.savefig('../output/plots/nnpde_comparison_psi.png')
     
     plt.figure()
-    plt.plot(model2.amax_vec)
-    plt.plot(model1.amax_vec[0:15])
+    plt.plot(model2.amax_vec,label='Neural Network')
+    plt.plot(model1.amax_vec[0:70],label='Finite Difference')
+    plt.xlabel('Time Step Iterations',fontsize=15)
+    plt.ylabel('Error$:$ $max (|J_e^{new}-J_e^{old}|,|J_h^{new}-J_h^{old}|)$',fontsize=15)
+    plt.grid(b=None)
+    plt.legend(loc=1,fontsize=15)
+    plt.savefig('../output/plots/nnpde_comparison_error.png')
+    
+    plt.figure()
+    plt.hist(model2.ChangeJe[model2.ChangeJe<0.008],density=False,bins=50);
+    plt.grid(b=None)
+    plt.yticks([])
+    plt.xlabel('Error$:$ $ |J_e^{new}-J_e^{old}|$',fontsize=15)
+    plt.ylabel('Distribution')
+    plt.savefig('../output/plots/nnpde_comparison_je_dist.png')
+    
+    plt.figure()
+    plt.hist(model2.ChangeJh[model2.ChangeJh<0.008],density=False,bins=50);
+    plt.grid(b=None)
+    plt.yticks([])
+    plt.xlabel('Error$:$ $ |J_h^{new}-J_h^{old}|$',fontsize=15)
+    plt.ylabel('Distribution')
+    plt.savefig('../output/plots/nnpde_comparison_jh_dist.png')
+    
+    
 

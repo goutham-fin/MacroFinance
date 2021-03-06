@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 
 
 class nnpde_informed():
-    def __init__(self,linearTerm,advection_z,advection_f,diffusion_z,diffusion_f,cross_term,J0,X,layers,X_f,dt,tb,learning_rate=0.01):
+    def __init__(self,linearTerm,advection_z,advection_f,diffusion_z,diffusion_f,cross_term,J0,X,layers,X_f,dt,tb,learning_rate,adam_iter):
         
         self.linearTerm = linearTerm
         self.advection_z = advection_z
@@ -31,7 +31,7 @@ class nnpde_informed():
         self.X_f = X_f
         self.dt = dt
         self.learning_rate = learning_rate
-        
+        self.adam_iter = adam_iter
         
         self.z_u = self.X[:,0:1]
         self.t_u = self.X[:,2:3]
@@ -42,7 +42,8 @@ class nnpde_informed():
         
         self.lb = np.array([0,self.y_u[0][0], self.dt])
         self.ub = np.array([1,self.y_u[-1][0], 0])
-        
+        #self.lb = 0
+        #self.ub = 1
         
         self.X_b = np.array([[self.z_u[0][0],self.y_u[0][0], 0],[self.z_u[0][0],self.y_u[0][0], self.dt],[self.z_u[-1][0],self.y_u[-1][0],0.],[self.z_u[-1][0],self.y_u[-1][0],self.dt]])
         self.z_b = np.array(self.X_b[:,0]).reshape(-1,1)
@@ -75,9 +76,9 @@ class nnpde_informed():
         
         
         self.loss = tf.reduce_mean(tf.square(self.u_tf-self.u_pred)) + \
-                        tf.reduce_mean(tf.square(self.f_pred))  +\
-                        0.001*tf.reduce_mean(tf.square(self.ub_y_pred)) +\
-                        0.001*tf.reduce_mean(tf.square(self.ub_z_pred)) 
+                        tf.reduce_mean(tf.square(self.f_pred))  #+\
+                        #tf.reduce_mean(tf.square(self.ub_y_pred)) #+\
+                        #tf.reduce_mean(tf.square(self.ub_z_pred)) #works even without this line for ies1 case
                         
                         
                         
@@ -164,7 +165,7 @@ class nnpde_informed():
         start_time = time.time()
         
         if True: #set this to true if you want adam to run 
-            for it in range(5000):
+            for it in range(self.adam_iter):
                 self.sess.run(self.train_op_Adam, tf_dict)
                 # Print
                 if it % 1000 == 0:
@@ -186,6 +187,8 @@ class nnpde_informed():
         #f_star = self.sess.run(self.f_pred, {self.z_f_tf: X_star[:,0:1],self.y_f_tf: X_star[:,1:2], self.t_f_tf: X_star[:,2:3]})
         tf.reset_default_graph()
         return u_star
+
+
 
 if __name__ =='__main__':
     J0 = Je0.astype(np.float32).reshape(-1,1)

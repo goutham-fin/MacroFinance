@@ -28,14 +28,14 @@ nsim: number of simulations to run
 class model_recursive():
     '''
     This class solves the baseline model with recursive utility (IES=1) from the paper 
-    'Confronting Macro-finance model with Data (2020). 
+    'Asset Pricing with Realistic Crisis Dynamics (2020)'
     Thanks to Sebastian Merkel for MATLAB version of parts of code. 
     '''
     def __init__(self, params):
         self.params = params
         
         # algorithm parameters
-        self.maxIterations = self.params['maxIterations']; 
+        self.maxIterations=500;
         self.convergenceCriterion = 1e-4; 
         self.dt = 0.9; #time step width
         self.converged = 'False'
@@ -314,9 +314,9 @@ class model_recursive():
 
 if __name__ == '__main__':
     params={'rhoE': 0.05, 'rhoH': 0.05, 'aE': 0.15, 'aH': 0.02,
-            'alpha':0.5, 'kappa':5, 'delta':0.05, 'zbar':0.1, 
-            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5,'maxIterations':400}
-    params['scale']=2
+            'alpha':0.75, 'kappa':5, 'delta':0.05, 'zbar':0.1, 
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':2, 'gammaH':2,'maxIterations':400}
+    params['scale']=1
     model_recur = model_recursive(params)
     model_recur.maxIterations=150
     model_recur.solve()  

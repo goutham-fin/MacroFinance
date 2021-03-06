@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import math
-from Simulaiton.simulation_benchmark import simulation_model
+from Simulation.simulation_benchmark import simulation_model
 sys.path.insert(0,'../Models/')
 from Benchmark.model_recursive_class import model_recursive
 from Benchmark.model_class import model
@@ -31,7 +31,13 @@ nsim: number of simulations to run
 '''
 
 if __name__ == '__main__':
-    pickle_path = '../../../../Desktop/pickles/' #specify location to store pickles (need lots of space)
+    try:
+        home = os.path.expanduser('~')
+        if not os.path.exists(os.path.join(home,'Desktop','pickles')):
+                os.mkdir(os.path.join(home,'Desktop','pickles'))
+        pickle_path = os.path.join(home,'Desktop','pickles','') #specify location to store pickles (need lots of space)
+    except:
+        print('Cannot set path for pickles')
     
     #function to store objects as pickles
     def pickle_stuff(object_name,filename):
@@ -47,17 +53,17 @@ if __name__ == '__main__':
     specify whether to run 'key' or 'all' (or 'base') or 'load and plot'. 'key' runs only for risk aversion 1,2,5, and 15.
     'all' runs for risk aversion from 1 till 20. 'load and plot' loads from pickles and plots equity risk premium.
     '''
-    nsim = 100
     
     if run == 'all':
-        params={'rhoE': 0.06, 'rhoH': 0.03, 'aE': 0.11, 'aH': 0.03,
-            'alpha':0.5, 'kappa':7, 'delta':0.025, 'zbar':0.1, 
-            'lambda_d':0.015, 'sigma':0.06,'maxIterations':400}
+        params={'rhoE': 0.06, 'rhoH': 0.04, 'aE': 0.11, 'aH': 0.03,
+            'alpha':0.5, 'kappa':10, 'delta':0.02, 'zbar':0.1, 
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':1, 'gammaH':1,'load':False, 'scale':2}
         params['utility'] = 'recursive' #utility can be 'recursive (IES=1)', 'recursive_general(IES!=1)', or 'crra'
+        params['nsim']=30
         sims = [0]*22
         for j in range(0,20):
             params['gammaE'] = params['gammaH'] = j+1
-            sims[j] = simulation_benchmark(params)
+            sims[j] = simulation_model(params)
             sims[j].simulate()
             sims[j].compute_statistics()
             print(sims[j].stats)
@@ -66,11 +72,12 @@ if __name__ == '__main__':
     
     if run == 'key':
         sims = []
-        params={'rhoE': 0.06, 'rhoH': 0.03, 'aE': 0.11, 'aH': 0.03,
-            'alpha':0.5, 'kappa':7, 'delta':0.025, 'zbar':0.1, 
-            'lambda_d':0.015, 'sigma':0.06,'maxIterations':400}
+        params={'rhoE': 0.06, 'rhoH': 0.04, 'aE': 0.11, 'aH': 0.03,
+            'alpha':0.5, 'kappa':10, 'delta':0.02, 'zbar':0.1, 
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':1, 'gammaH':1,'load':False, 'scale':2}
         params['gammaE'] = 1; params['gammaH'] = 1; params['sigma'] = 0.06; params['utility'] = 'recursive'
-        sim1 = simulation_benchmark(params)
+        params['nsim']=100
+        sim1 = simulation_model(params)
         sim1.simulate()  
         sim1.compute_statistics()
         print(sim1.stats)
@@ -79,7 +86,7 @@ if __name__ == '__main__':
         
         
         params['gammaE'] = 2; params['gammaH'] = 2;
-        sim2 = simulation_benchmark(params)
+        sim2 = simulation_model(params)
         sim2.simulate()  
         sim2.compute_statistics()
         print(sim2.stats)
@@ -87,7 +94,7 @@ if __name__ == '__main__':
         pickle_stuff(sim2, str('sim2') + '.pkl')
         
         params['gammaE'] = 10; params['gammaH'] = 10;
-        sim3 = simulation_benchmark(params)
+        sim3 = simulation_model(params)
         sim3.simulate()  
         sim3.compute_statistics()
         print(sim3.stats)
@@ -96,7 +103,7 @@ if __name__ == '__main__':
         
         
         params['gammaE'] = 20; params['gammaH'] = 20;
-        sim4 = simulation_benchmark(params)
+        sim4 = simulation_model(params)
         sim4.simulate()  
         sim4.compute_statistics()
         print(sim4.stats)
@@ -176,6 +183,8 @@ if __name__ == '__main__':
         ax1.set_ylabel('E[risk premia]', color='g')
         ax2.set_ylabel('Std[risk premia]', color='b')
         ax1.legend(bbox_to_anchor=(0.1,1), loc="upper left")
+        ax1.grid(False)
+        ax2.grid(False)
         plt.savefig('../output/plots/trade_off.png')
         
         fig, ax1 = plt.subplots()
@@ -194,19 +203,21 @@ if __name__ == '__main__':
         ax1.set_ylabel('E[rp]', color='g')
         ax2.set_ylabel('Std[rp]', color='b')
         ax1.legend(bbox_to_anchor=(0.1,1), loc="upper left")
+        ax1.grid(False)
+        ax2.grid(False)
         plt.savefig('../output/plots/trade_off_crisis.png')
-    
+        
     ####plot distribution
     
     ####plots for Figure1
-    params={'rhoE': 0.06, 'rhoH': 0.03, 'aE': 0.15, 'aH': 0.03,
-            'alpha':0.5, 'kappa':10, 'delta':0.035, 'zbar':0.1, 
-            'lambda_d':0.015, 'sigma':0.06,'maxIterations':400}
+    params={'rhoE': 0.06, 'rhoH': 0.04, 'aE': 0.11, 'aH': 0.03,
+            'alpha':0.5, 'kappa':10, 'delta':0.02, 'zbar':0.1, 
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':1, 'gammaH':1,'load':False, 'scale':2}
     
     if run=='key':
-        log = eval(sims[0])
-        crra = eval(sims[1])
-        rec = eval(sims[-1])
+        rec1 = eval(sims[0])
+        rec2 = eval(sims[1])
+        rec3 = eval(sims[-1])
         
         vars_list = ['Q','Phi','sig_ka','mu_z','sig_za','mrp','rp'] 
         obs = ['log','crra','rec']
@@ -222,9 +233,9 @@ if __name__ == '__main__':
         plot_path = '../output/plots/'            
         for i in range(len(vars_list)):
             last = 20
-            plt.plot(log.z[1:-last], eval(vars_[3*i])[1:-last,0],label='Log')
-            plt.plot(crra.z[1:-last],eval(vars_[3*i+1])[1:-last,0],label='CRRA (RA=2)')
-            plt.plot(rec.z[1:-last],eval(vars_[3*i+2])[1:-last,0],label='Recursive (RA=15)',color='b') 
+            plt.plot(rec1.z[1:-last], eval(vars_[3*i])[1:-last,0],label='RA=1')
+            plt.plot(rec2.z[1:-last],eval(vars_[3*i+1])[1:-last,0],label='RA=5')
+            plt.plot(rec3.z[1:-last],eval(vars_[3*i+2])[1:-last,0],label='RA=15',color='b') 
             plt.grid(True)
             plt.legend(loc=0)
             plt.axis('tight')
@@ -238,9 +249,9 @@ if __name__ == '__main__':
             plt.figure()
         
         plt.figure()
-        plt.plot(log.f_norm[10:-20], label='Log')
-        plt.plot(crra.f_norm[10:-20], label='CRRA')
-        plt.plot(rec.f_norm[10:-20], label='Recursive')
+        plt.plot(rec1.f_norm[10:-20], label='RA=1')
+        plt.plot(rec2.f_norm[10:-20], label='RA=5')
+        plt.plot(rec3.f_norm[10:-20], label='RA=15')
         plt.title('Stationary Distribution', fontsize = 20)
     
     
@@ -267,5 +278,6 @@ if __name__ == '__main__':
             
     if run=='all': objs = ['sim1','sim5', 'sim8', 'sim11']
     if run=='key': objs = sims
+    if run=='load and plot': objs = plot_sims
     plots_distribution(objs)
         

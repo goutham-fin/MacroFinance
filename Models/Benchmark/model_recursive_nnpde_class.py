@@ -35,7 +35,7 @@ class model_recursive_nnpde():
         # algorithm parameters
         self.maxIterations = self.params['maxIterations']; 
         self.convergenceCriterion = 1e-2; 
-        self.dt = 1; 
+        self.dt = 1; #time step width
         self.converged = 'False'
         self.Iter=0
         # grid parameters
@@ -52,8 +52,8 @@ class model_recursive_nnpde():
         
         if self.grid_method == 'non-uniform':
             auxGrid = np.linspace(0,1,self.Nz);
-            auxGridNonuniform = 3*auxGrid ** 2  - 2*auxGrid **3; 
-            self.z = zMin + [zMax - zMin]*auxGridNonuniform; 
+            auxGridNonuniform = 3*auxGrid ** 2  - 2*auxGrid **3; #nonuniform grid from 0 to 1
+            self.z = zMin + [zMax - zMin]*auxGridNonuniform; #nonuniform grid from zMin to zMax
         if self.grid_method == 'uniform':
             self.z = np.linspace(zMin,zMax,self.Nz);
         
@@ -69,7 +69,7 @@ class model_recursive_nnpde():
         self.qz  = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
         self.qzz = np.array(np.tile(0,(self.Nz,self.Nf)), dtype=np.float64); 
         
-        # allocate memory for other equilibrium quantities
+        # allocate memory for other variables
         self.psi = np.full([self.Nz,1],np.NaN)
         self.chi = np.full([self.Nz,1],np.NaN)
         self.ssq = np.full([self.Nz,1],np.NaN)
@@ -145,7 +145,7 @@ class model_recursive_nnpde():
         self.q[0] = (1 + self.params['kappa']*(self.params['aH'] + self.psi[0]*(self.params['aE']-self.params['aH'])))/(1 + self.params['kappa']*(self.params['rhoH'] + self.z[0] * (self.params['rhoE'] - self.params['rhoH'])));
         self.chi[0] = 0;
         self.ssq[0] = self.params['sigma'];
-        self.q0 = (1 + self.params['kappa'] * self.params['aH'])/(1 + self.params['kappa'] * self.params['rhoH']); 
+        self.q0 = (1 + self.params['kappa'] * self.params['aH'])/(1 + self.params['kappa'] * self.params['rhoH']); #heoretical limit at z=0 [just used in a special case below that is probably never entered]
         self.iota[0] = (self.q0-1)/self.params['kappa']
         
         for timeStep in range(self.maxIterations):
@@ -171,11 +171,11 @@ class model_recursive_nnpde():
             self.crisis_flag[0:self.thresholdIndex] = 1
             self.psi[self.thresholdIndex:] = 1;
             self.q[self.thresholdIndex:] = (1 + self.params['kappa']*(self.params['aH'] + self.psi[self.thresholdIndex:]*(self.params['aE']-self.params['aH']))).reshape(-1,1)/(1 + self.params['kappa']*(self.params['rhoH'] + self.z[self.thresholdIndex:]*(self.params['rhoE']-self.params['rhoH']))).reshape(-1,1);
-            self.chi[self.thresholdIndex:] = np.maximum(self.z[self.thresholdIndex:],self.params['alpha']).reshape(-1,1); 
-            
+            self.chi[self.thresholdIndex:] = np.maximum(self.z[self.thresholdIndex:],self.params['alpha']).reshape(-1,1); #NOTE: this seems incorrect for gammaE~=gammaH!
+            #self.iota[self.thresholdIndex:] = 1 + self.params['kappa']* self.q[self.thresholdIndex:];
             self.iota[self.thresholdIndex:] = (self.q[self.thresholdIndex:]-1)/self.params['kappa']
             if self.thresholdIndex==0:
-                self.dq[self.thresholdIndex:-1] = (self.q[1:] - np.vstack([self.q0,self.q[0:-2]])) / (self.z - np.vstack([0,self.z[:-2]])) 
+                self.dq[self.thresholdIndex:-1] = (self.q[1:] - np.vstack([self.q0,self.q[0:-2]])) / (self.z - np.vstack([0,self.z[:-2]])) #needs fixing
             else:
                 self.dq[self.thresholdIndex:] = (self.q[self.thresholdIndex:]- self.q[self.thresholdIndex-1:-1]).reshape(-1,1)/(self.z[self.thresholdIndex:]-self.z[self.thresholdIndex-1:-1]).reshape(-1,1);
             self.ssq[self.thresholdIndex:] = self.params['sigma']/(1-self.dq[self.thresholdIndex:]/self.q[self.thresholdIndex:] * (self.chi[self.thresholdIndex:]-self.z[self.thresholdIndex:].reshape(-1,1)));
@@ -190,7 +190,7 @@ class model_recursive_nnpde():
             self.qzzl = self.qzz/ self.q;
             self.consWealthRatioE = self.params['rhoE'];
             self.consWealthRatioH = self.params['rhoH'];
-            self.sig_za = (self.chi - self.z.reshape(-1,1))*self.ssq; 
+            self.sig_za = (self.chi - self.z.reshape(-1,1))*self.ssq; #sig_za := \sigma^\z \z, similary mu_z
             if self.params['scale']>1:
                 self.priceOfRiskE = (1/self.z.reshape(-1,1) - self.dLogJe.reshape(-1,1)*(1-self.params['gammaE'])) * self.sig_za + self.ssq + (self.params['gammaE']-1) * self.params['sigma'];
                 self.priceOfRiskH = -(1/(1-self.z.reshape(-1,1)) + self.dLogJh.reshape(-1,1)*(1-self.params['gammaH']))*self.sig_za + self.ssq + (self.params['gammaH']-1) * self.params['sigma'];
@@ -272,27 +272,34 @@ class model_recursive_nnpde():
                     new_vector = np.vstack((new_vector,vector[max(0,self.thresholdIndex-50) : min(self.thresholdIndex+50,self.Nz)]))
                     return new_vector
             
-            X_,X_f_,Jhat_e0_,Jhat_h0_ = add_crisis_points(X),add_crisis_points(X_f),add_crisis_points(Jhat_e0),add_crisis_points(Jhat_h0)
-            diffusion, advectionE, advectionH = add_crisis_points(self.diffusion.reshape(-1,1)),add_crisis_points(self.advectionE.reshape(-1,1)),add_crisis_points(self.advectionH.reshape(-1,1))
-            linearTermE, linearTermH = add_crisis_points(self.linearTermE.reshape(-1,1)),add_crisis_points(self.linearTermH.reshape(-1,1))
-            crisisPointsLength = X_.shape[0]-X.shape[0]
-            
+            if self.params['active']=='on':
+                X_,X_f_,Jhat_e0_,Jhat_h0_ = add_crisis_points(X),add_crisis_points(X_f),add_crisis_points(Jhat_e0),add_crisis_points(Jhat_h0)
+                diffusion, advectionE, advectionH = add_crisis_points(self.diffusion.reshape(-1,1)),add_crisis_points(self.advectionE.reshape(-1,1)),add_crisis_points(self.advectionH.reshape(-1,1))
+                linearTermE, linearTermH = add_crisis_points(self.linearTermE.reshape(-1,1)),add_crisis_points(self.linearTermH.reshape(-1,1))
+                crisisPointsLength = X_.shape[0]-X.shape[0]
+            else:
+                diffusion, advectionE, advectionH = self.diffusion.reshape(-1,1), self.advectionE.reshape(-1,1), self.advectionH.reshape(-1,1)
+                linearTermE,linearTermH = self.linearTermE.reshape(-1,1), self.linearTermH.reshape(-1,1)
             idx1 = np.random.choice(X_.shape[0], 200, replace=False)
-            idx2 = np.random.choice(np.arange(X_.shape[0]-crisisPointsLength,X_.shape[0]),100,replace=True)
-            idx = np.hstack((idx1,idx2))
-            
+            if self.params['active'] == 'on':
+                idx2 = np.random.choice(np.arange(X_.shape[0]-crisisPointsLength,X_.shape[0]),100,replace=True)
+                idx = np.hstack((idx1,idx2))
+            else:
+                idx2 = np.random.choice(X_.shape[0],100,replace=False)
+                idx = np.hstack((idx1,idx2))
+            #idx = np.arange(0,X.shape[0])
             X_, X_f_, Jhat_e0_, Jhat_h0_ = X_[idx], X_f_[idx], Jhat_e0_[idx], Jhat_h0_[idx]
             linearTermE_tile,linearTermH_tile = linearTermE[idx], linearTermH[idx]
             advectionE_tile, advectionH_tile, diffusion_tile = advectionE[idx], advectionH[idx], diffusion[idx]
             
-            
-            model_E = nnpde_informed(-linearTermE_tile,advectionE_tile,diffusion_tile,Jhat_e0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate)
+            #solve the PDE
+            model_E = nnpde_informed(-linearTermE_tile,advectionE_tile,diffusion_tile,Jhat_e0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate,self.params['nEpochs'])
             model_E.train()
             newJe = model_E.predict(x_star)
             model_E.sess.close()
             del model_E
 
-            model_H = nnpde_informed(-linearTermH_tile,advectionH_tile,diffusion_tile,Jhat_h0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate)
+            model_H = nnpde_informed(-linearTermH_tile,advectionH_tile,diffusion_tile,Jhat_h0_.reshape(-1,1).astype(np.float32),X_,layers,X_f_,self.dt,tb,learning_rate,self.params['nEpochs'])
             model_H.train()
             newJh = model_H.predict(x_star)
             model_H.sess.close()
@@ -319,9 +326,6 @@ class model_recursive_nnpde():
             self.amax_vec.append(self.amax)
             
             def plot_grid(data,name):
-                '''
-                Visualize the grid
-                '''
                 fix,ax = plt.subplots()
                 mypoints=[]
                 mypoints.append([data[:,0],data[:,1]])
@@ -354,13 +358,14 @@ class model_recursive_nnpde():
 if __name__ == '__main__':
     params={'rhoE': 0.05, 'rhoH': 0.05, 'aE': 0.15, 'aH': 0.02,
             'alpha':0.5, 'kappa':5, 'delta':0.05, 'zbar':0.1, 
-            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5,'maxIterations':400}
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5,'maxIterations':400,'nEpochs':2000}
     params['scale'] = 2
+    params['active'] = 'off'
     model1 = model_recursive_nnpde(params)
     model1.maxIterations=40
     model1.solve()
     
-    if False: #set this to true if you want to store the pickle
+    if False:
         def pickle_stuff(object_name,filename):
             with open(filename,'wb') as f:
                 dill.dump(object_name,f)

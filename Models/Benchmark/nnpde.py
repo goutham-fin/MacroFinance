@@ -1,3 +1,5 @@
+#import tensorflow.compat.v1 as tf
+#tf.disable_v2_behavior()
 import logging, os 
 os.system('clear')
 logging.disable(logging.WARNING) 
@@ -18,7 +20,7 @@ warnings.filterwarnings("ignore")
 
 
 class nnpde_informed():
-    def __init__(self,linearTerm,advection,diffusion,J0,X,layers,X_f,dt,tb, learning_rate):
+    def __init__(self,linearTerm,advection,diffusion,J0,X,layers,X_f,dt,tb, learning_rate,nEpochs):
         
         self.linearTerm = linearTerm
         self.advection = advection
@@ -31,7 +33,10 @@ class nnpde_informed():
         self.dt = dt
         self.lb = np.array([0,self.dt])
         self.ub = np.array([1,0])
+        #self.lb = 0
+        #self.ub = 1
         self.learning_rate = learning_rate
+        self.nEpochs = nEpochs
         
         self.z_u = self.X[:,0:1]
         self.t_u = self.X[:,1:2]
@@ -45,6 +50,7 @@ class nnpde_informed():
         self.weights, self.biases = self.initialize_nn(layers)
         
         #tf placeholders and computational graph
+        #tf.reset_default_graph()
         self.sess = tf.Session(config = tf.ConfigProto(allow_soft_placement = True, log_device_placement = True))
         self.z_u_tf = tf.placeholder(tf.float32,shape=[None,self.z_u.shape[1]])
         self.t_u_tf = tf.placeholder(tf.float32,shape=[None,self.t_u.shape[1]])
@@ -146,7 +152,7 @@ class nnpde_informed():
         start_time = time.time()
 
         if True: #set this to true if you want adam to run 
-            for it in range(5000):
+            for it in range(self.nEpochs):
                 self.sess.run(self.train_op_Adam, tf_dict)
                 # Print
                 if it % 1000 == 0:

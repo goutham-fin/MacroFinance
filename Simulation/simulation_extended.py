@@ -32,7 +32,6 @@ from itertools import groupby
 import warnings
 warnings.filterwarnings("ignore")
 
-
 class simulationExtended():
 
     def __init__(self,params):
@@ -50,21 +49,24 @@ class simulationExtended():
             self.ex = read_pickle('../Models/Extended/model2D')
         else:
             self.ex =  model_nnpde(params)
-        self.z, self.f, self.crisis_z, self.mu_z, self.sig_zk, self.sig_zf, self.ssq, self.ssf, self.iota, self.theta, self.thetah, self.rp, self.rp_, self.r, self.Q, self.rho, self.rho_, self.Phi, self.params['delta'], self.params['sigma'], self.beta_f = self.ex.z, self.ex.f, self.ex.crisis, self.ex.mu_z, self.ex.sig_zk, self.ex.sig_zf, self.ex.ssq, self.ex.ssf, self.ex.iota, \
-                                                            self.ex.theta, self.ex.thetah, self.ex.rp, self.ex.rp_, self.ex.r, self.ex.q, self.ex.params['rhoE'], self.ex.params['rhoH'], self.ex.Phi, self.ex.params['delta'], self.ex.params['sigma'], self.ex.params['beta_f']
+            self.ex.solve()
+        self.z, self.f, self.crisis_z, self.mu_z, self.sig_zk, self.sig_zf, self.ssq, self.ssf, self.iota, self.theta, self.thetah, self.rp, self.rp_, self.r, self.Q, self.rho, self.Phi, self.params['delta'], self.params['sigma'], self.beta_f = self.ex.z, self.ex.f, self.ex.crisis, self.ex.mu_z, self.ex.sig_zk, self.ex.sig_zf, self.ex.ssq, self.ex.ssf, self.ex.iota, \
+                                                            self.ex.theta, self.ex.thetah, self.ex.rp, self.ex.rp_, self.ex.r, self.ex.q, self.ex.params['rho'], self.ex.Phi, self.ex.params['delta'], self.ex.params['sigma'], self.ex.params['beta_f']
         self.rp = self.ex.rp
         self.crisis_flag = self.ex.crisis_flag
         self.A, self.AminusIota, self.pd = self.ex.A, self.ex.AminusIota, self.ex.pd
         self.mrpk_e, self.mrpf_e = self.ex.priceOfRiskE_k, self.ex.priceOfRiskE_f
         self.psi = self.ex.psi
         self.mu_re = self.ex.mu_rE
-        if not os.path.exists('../output'):
-            os.mkdir('../output')
-        
+        try:
+            if not os.path.exists('../output'):
+                os.mkdir('../output')
+        except:
+            print('Warning: Cannot create directory')
         self.interp_method = 'bivariate' #interp2d sorts by x and y axis automatically
         
-        #change definition of crises region
-        #self.crisis_flag[:,self.crisis_flag.shape[1]//2:]=0
+        #modify crisis region
+        self.crisis_flag[:,self.crisis_flag.shape[1]//2:]=0
         
     def interpolate_values(self):
         if self.interp_method == 'bivariate':
@@ -137,17 +139,20 @@ class simulationExtended():
         self.z_trim = self.z_sim[int(self.burn_period):,:]
         self.f_trim = self.f_sim[int(self.burn_period):,:]
         self.k_trim = self.k_sim[int(self.burn_period):,:]
-        self.shock_trim = self.shock_series[int(self.burn_period):,:]
+        self.shock1_trim = self.shock_series[int(self.burn_period):,:]
+        self.shock2_trim = self.shock2_series[int(self.burn_period):,:]
         self.z_trim_ann = np.full([ int(self.z_trim.shape[0]*self.dt),int(self.z_trim.shape[1])],np.nan)
         self.f_trim_ann = np.full([ int(self.f_trim.shape[0]*self.dt),int(self.f_trim.shape[1])],np.nan)
         self.k_trim_ann = np.full([ int(self.k_trim.shape[0]*self.dt),int(self.k_trim.shape[1])],np.nan)
         
-        self.shock_trim_ann = np.full([ int(self.z_trim.shape[0]*self.dt),int(self.z_trim.shape[1])],np.nan)
+        self.shock1_trim_ann = np.full([ int(self.z_trim.shape[0]*self.dt),int(self.z_trim.shape[1])],np.nan)
+        self.shock2_trim_ann = np.full([ int(self.z_trim.shape[0]*self.dt),int(self.z_trim.shape[1])],np.nan)
         for j in range(self.z_trim_ann.shape[1]):
             self.z_trim_ann[:,j] = self.z_trim[:,j].reshape(-1,int(1/self.dt)).mean(axis=1)
             self.f_trim_ann[:,j] = self.f_trim[:,j].reshape(-1,int(1/self.dt)).mean(axis=1)
             self.k_trim_ann[:,j] = self.k_trim[:,j].reshape(-1,int(1/self.dt)).mean(axis=1)
-            self.shock_trim_ann[:,j] = self.shock_trim[:,j].reshape(-1,int(1/self.dt)).mean(axis=1)
+            self.shock1_trim_ann[:,j] = self.shock1_trim[:,j].reshape(-1,int(1/self.dt)).mean(axis=1)
+            self.shock2_trim_ann[:,j] = self.shock2_trim[:,j].reshape(-1,int(1/self.dt)).mean(axis=1)
     
         self.z_sim_avg = self.z_trim_ann.reshape(-1).mean(axis=0)
         self.f_sim_avg = self.f_trim_ann.reshape(-1).mean(axis=0)
@@ -246,8 +251,10 @@ class simulationExtended():
         self.muz_fn_all, self.muz_fn_crisis, self.muz_fn_good = self.compute_statistics_ann_fn(self.mu_z_fn)
         
         
-        self.shock_fn_all = self.shock_trim_ann
-        self.shock_fn_crisis, self.shock_fn_good = self.compute_statistics_ann_var(self.shock_fn_all)
+        self.shock1_fn_all = self.shock1_trim_ann
+        self.shock1_fn_crisis, self.shock1_fn_good = self.compute_statistics_ann_var(self.shock1_fn_all)
+        self.shock2_fn_all = self.shock2_trim_ann
+        self.shock2_fn_crisis, self.shock2_fn_good = self.compute_statistics_ann_var(self.shock2_fn_all)
         self.retQ_fn_all = np.diff(np.log(self.Q_fn_all),axis=0)
         self.retQ_fn_all = np.vstack([self.retQ_fn_all[0,:],self.retQ_fn_all])
         self.retQ_fn_crisis, self.retQ_fn_good = self.compute_statistics_ann_var(self.retQ_fn_all)
@@ -257,7 +264,7 @@ class simulationExtended():
             self.outputG_fn_all[:,n] = np.hstack([np.nan,np.diff(np.log(self.output_fn_all[:,n]))])
         self.outputG_fn_crisis, self.outputG_fn_good = self.outputG_fn_all*self.crisis_indicator, self.outputG_fn_all * np.array(pd.DataFrame(1-self.crisis_indicator).fillna(1).replace(0,np.nan))
         
-        vars_corr = ['theta_shock','theta_Q','theta_mrpke','shock_mrpke','Q_r', 'retQ_r', 'rp_sigka', 'shock_sigka', 'mure_r'] #rp_outputG
+        vars_corr = ['theta_shock1','theta_Q','theta_mrpke','shock1_mrpke','Q_r', 'retQ_r', 'rp_sigka', 'shock1_sigka', 'mure_r'] #rp_outputG
         self.stats_corr = pd.DataFrame(np.full([len(vars_corr),3],np.nan))
         #correlation statistics
         for i in range(len(vars_corr)):
@@ -281,7 +288,6 @@ class simulationExtended():
         for j in range(len(vars_corr)): index_temp.append('Corr(' + str(vars_corr[j].split('_')[0]) + ',' + str(vars_corr[j].split('_')[1]) + ')')
         self.stats_corr.index = index_temp  
         del index_temp
-        
         
         #compute relevant statistics
         vars = ['theta','thetah', 'iota', 'r', 'rp', 'rph', 'Q', 'sigka','sigfa', 'mrpke', 'mrpfe', 'pd', 'mure','outputG', 'retQ']
@@ -307,106 +313,107 @@ class simulationExtended():
         del index_temp
         self.stats = pd.concat((self.stats,self.stats_corr))
         
-        self.stats =  pd.concat((self.stats, pd.Series({'No of crisis periods': self.Q_fn_crisis.shape[0], 'freq': int(1/self.dt), 'prob (dt freq)': self.prob,  'gammaE':self.ex.params['gammaE'],'gammaH':self.ex.params['gammaH'],'sigma':self.params['sigma'], 
-                                                        'a':self.params['aE'], 'ah':self.params['aH'], 'depr':self.params['delta'], 'kappa':self.params['kappa']}).transpose()), axis=0, ignore_index = False)
+        self.stats =  pd.concat((self.stats, pd.Series({'No of crisis periods': self.Q_fn_crisis.shape[0], 'freq': int(1/self.dt), 'prob (dt freq)': self.prob,  'gamma':self.ex.params['gamma'],'sigma':self.params['sigma'], 
+                                                         'ah':self.params['aH'], 'depr':self.params['delta'], 'kappa':self.params['kappa']}).transpose()), axis=0, ignore_index = False)
         self.stats.columns = ['All','Crisis','Good']
         self.stats = round(self.stats,4)
         
-        
-    
-        
+
 if __name__ == '__main__':
-    params={'rhoE': 0.06, 'rhoH': 0.03, 'aE': 0.11, 'aH': 0.03,
-            'alpha':0.5, 'kappa':7, 'delta':0.025, 'zbar':0.1, 
-            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5, 'corr':1.0,
+    params={'rho': 0.05, 'aH': 0.02,
+            'alpha':0.65, 'kappa':5, 'delta':0.05, 'zbar':0.1, 
+            'lambda_d':0.03, 'sigma':0.06, 'gamma':5,  'corr':0.9,
              'pi' : 0.01, 'f_u' : 0.2, 'f_l' : 0.1, 'f_avg': 0.15,
-            'hazard_rate1' :0.06, 'hazard_rate2':0.4}
+            'hazard_rate1' :0.065, 'hazard_rate2':0.45,'active':'on','epochE': 3000, 'epochH':2000,
+            'Nz':1000,'Nf':30}
     params['beta_f'] = 0.25/params['sigma']
     params['load_pickle'] = True
-    params['nsim'] = 50
+    params['write_pickle'] = False
+    params['scale'] = 2
+    params['nsim'] = 30
     sim_ex = simulationExtended(params)
     sim_ex.simulate()
     sim_ex.compute_statistics()
     #sim_ex.write_files()
     print(sim_ex.stats)
-    
     print(sim_ex.crisis_length_mean,sim_ex.crisis_length_freq_mean)
     
-    plt.figure()
-    plt.hist(sim_ex.z_trim_ann.reshape(-1),bins=100, density=True);
-    plt.grid(False)
-    plt.xlabel('Wealth share',fontsize=15)
-    plt.savefig('../output/plots/sim_z.png')
-    
-    plt.figure()
-    plt.hist(sim_ex.crisis_z,bins=100,density=True);
-    plt.grid(False)
-    plt.title('Extended model')
-    plt.xlabel('Wealth share')
-    plt.savefig('../output/plots/crisis_z_extended.png')
-    
-    
-    plt.figure()
-    plt.hist2d(sim_ex.crisis_z,sim_ex.crisis_f);
-    
-    plt.figure()
-    plt.plot(sim_ex.f_trim[:,0]) 
-    plt.ylabel('Productivity of experts',fontsize=15)
-    plt.xlabel('Months',fontsize=15)
-    plt.savefig('../output/plots/experts_sim.png')
-    
-    
-    sns.set_style({'axes.grid' : False})
-    import matplotlib.gridspec as gridspec
-    x = sim_ex.crisis_z
-    y = sim_ex.crisis_f
-    
-    fig = plt.figure(figsize=(8,8))
-    gs = gridspec.GridSpec(3, 3)
-    ax_main = plt.subplot(gs[1:3, :2])
-    ax_main.grid(False)
-    ax_xDist = plt.subplot(gs[0, :2],sharex=ax_main)
-    ax_xDist.grid(False)
-    ax_yDist = plt.subplot(gs[1:3, 2],sharey=ax_main)
-    ax_yDist.grid(False)
-    
-    ax_main.scatter(x,y,marker='.')
-    ax_main.set(xlabel="Wealth Share", ylabel="Expert Productivity")
-    
-    ax_xDist.hist(x,bins=100,align='mid')
-    ax_xDist.set(ylabel='count')
-    ax_xCumDist = ax_xDist.twinx()
-    ax_xCumDist.set_ylabel('Distribution',color='r')
-    
-    
-    ax_yDist.hist(y,bins=100,orientation='horizontal',align='mid')
-    ax_yDist.set(xlabel='count')
-    ax_yCumDist = ax_yDist.twiny()
-    ax_yCumDist.set_xlabel('Distribution',color='r')
-    plt.savefig('../output/plots/crisis_z_2d.png')
-    plt.show()
-    
-    nber = pd.read_csv('../Data/NBER_USREC.csv')
-    np.percentile(nber['Duration, peak to trough'][0:32],10)
-    np.percentile(nber['Duration, peak to trough'][0:32],50)
-    np.percentile(nber['Duration, peak to trough'][0:32],90)
-    np.mean(nber['Duration, peak to trough'][0:32])
-    
-    print(sim_ex.crisis_length_freq_data.quantile(0.1))
-    print(sim_ex.crisis_length_freq_data.quantile(0.5))
-    print(sim_ex.crisis_length_freq_data.quantile(0.9))
-    print(sim_ex.crisis_length_freq_data.mean())
-    
-    trim = 400000
-    sns.set(font_scale=1.2)    
-    df = pd.DataFrame({'Wealth share':sim_ex.z_trim_ann.reshape(-1)[0:trim],'Expert productivity':sim_ex.f_trim_ann.reshape(-1)[0:trim]})
-    p = sns.jointplot(x='Wealth share',y='Expert productivity',data=df,kind='kde')
-    p.savefig('../output/plots/z_a_jointplot.png')
-    
-    sns.set(font_scale=1.2)
-    df_crisis = pd.DataFrame({'Wealth share':sim_ex.crisis_z,'Expert productivity':sim_ex.crisis_f})
-    p_crisis = sns.jointplot(x='Wealth share', y='Expert productivity', data=df_crisis, kind='hex')
-    p_crisis.savefig('../output/plots/z_a_jointplot_crisis.png')
-    
-    
-    
+    if True:
+        try:
+            if not os.path.exists('../output/plots'):
+                os.mkdir('../output/plots')
+        except:
+            print('Warning: Cannot create directory')
+        
+        plt.figure()
+        plt.hist(sim_ex.z_trim_ann.reshape(-1),bins=100, density=True);
+        plt.grid(False)
+        plt.xlabel('Wealth share',fontsize=15)
+        plt.savefig('../output/plots/sim_z.png')
+        
+        plt.figure()
+        plt.hist(sim_ex.crisis_z,bins=100,density=True);
+        plt.grid(False)
+        #plt.title('Extended model')
+        plt.xlabel('Wealth share')
+        plt.savefig('../output/plots/crisis_z_extended.png')
+        
+        
+        plt.figure()
+        plt.hist2d(sim_ex.crisis_z,sim_ex.crisis_f);
+        
+        plt.figure()
+        plt.plot(sim_ex.f_trim[:,0]) 
+        plt.ylabel('Productivity of experts',fontsize=15)
+        plt.xlabel('Months',fontsize=15)
+        plt.savefig('../output/plots/experts_sim.png')
+        
+        
+        sns.set_style({'axes.grid' : False})
+        import matplotlib.gridspec as gridspec
+        x = sim_ex.crisis_z
+        y = sim_ex.crisis_f
+        
+        fig = plt.figure(figsize=(8,8))
+        gs = gridspec.GridSpec(3, 3)
+        ax_main = plt.subplot(gs[1:3, :2])
+        ax_main.grid(False)
+        ax_xDist = plt.subplot(gs[0, :2],sharex=ax_main)
+        ax_xDist.grid(False)
+        ax_yDist = plt.subplot(gs[1:3, 2],sharey=ax_main)
+        ax_yDist.grid(False)
+        
+        ax_main.scatter(x,y,marker='.')
+        ax_main.set(xlabel="Wealth Share", ylabel="Expert Productivity")
+        
+        ax_xDist.hist(x,bins=100,align='mid')
+        ax_xDist.set(ylabel='count')
+        ax_xCumDist = ax_xDist.twinx()
+        ax_xCumDist.set_ylabel('Distribution',color='r')
+        
+        
+        ax_yDist.hist(y,bins=100,orientation='horizontal',align='mid')
+        ax_yDist.set(xlabel='count')
+        ax_yCumDist = ax_yDist.twiny()
+        ax_yCumDist.set_xlabel('Distribution',color='r')
+        plt.savefig('../output/plots/crisis_z_2d.png')
+        plt.show()
+        
+        print(sim_ex.crisis_length_freq_data.quantile(0.1))
+        print(sim_ex.crisis_length_freq_data.quantile(0.5))
+        print(sim_ex.crisis_length_freq_data.quantile(0.9))
+        print(sim_ex.crisis_length_freq_data.mean())
+        
+        trim = 400000
+        sns.set(font_scale=1.2)    
+        df = pd.DataFrame({'Wealth share':sim_ex.z_trim_ann.reshape(-1)[0:trim],'Expert productivity':sim_ex.f_trim_ann.reshape(-1)[0:trim]})
+        p = sns.jointplot(x='Wealth share',y='Expert productivity',data=df,kind='kde')
+        p.savefig('../output/plots/z_a_jointplot.png')
+        
+        sns.set(font_scale=1.2)
+        df_crisis = pd.DataFrame({'Wealth share':sim_ex.crisis_z,'Expert productivity':sim_ex.crisis_f})
+        p_crisis = sns.jointplot(x='Wealth share', y='Expert productivity', data=df_crisis, kind='hex')
+        p_crisis.savefig('../output/plots/z_a_jointplot_crisis.png')
+        
+        
+        
