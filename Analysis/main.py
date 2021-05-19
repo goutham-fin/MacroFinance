@@ -48,7 +48,7 @@ if __name__ == '__main__':
         with open(str(filename) + '.pkl', 'rb') as f:
             return dill.load(f)
     
-    run = 'load and plot' 
+    run = 'key' 
     '''
     specify whether to run 'key' or 'all' (or 'base') or 'load and plot'. 'key' runs only for risk aversion 1,2,5, and 15.
     'all' runs for risk aversion from 1 till 20. 'load and plot' loads from pickles and plots equity risk premium.
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         pickle_stuff(sim1,  str('sim1') + '.pkl')
         
         
-        params['gammaE'] = 2; params['gammaH'] = 2;
+        params['gammaE'] = 5; params['gammaH'] = 5;
         sim2 = simulation_model(params)
         sim2.simulate()  
         sim2.compute_statistics()
@@ -214,7 +214,7 @@ if __name__ == '__main__':
             'alpha':0.5, 'kappa':10, 'delta':0.02, 'zbar':0.1, 
             'lambda_d':0.03, 'sigma':0.06, 'gammaE':1, 'gammaH':1,'load':False, 'scale':2}
     
-    if run=='key':
+    if run=='key?':
         rec1 = eval(sims[0])
         rec2 = eval(sims[1])
         rec3 = eval(sims[-1])
@@ -257,20 +257,26 @@ if __name__ == '__main__':
     
     def plots_distribution(objs):  
         for ob in objs:
-            svm = sns.distplot(eval(ob).z_trim_ann.reshape(-1), hist=False, kde=True)
-            plt.axvline(eval(ob).z_trim_ann.reshape(-1).mean(), color='k', linestyle='dashed', linewidth=1)
-            plt.axvline(eval(ob).z[eval(ob).crisis_z], color='b', linewidth=3)
-            fig = svm.get_figure()
-            fig.savefig('../output/plots/' + str(ob) + 'distribution_seaborn.png')
-            plt.close(fig)
-            fig = plt.figure()
+            steady_state = np.where(eval(ob).mu_z==min(eval(ob).mu_z, key=lambda x:abs(x-0)))[0][0]
+            if True:
+                svm = sns.distplot(eval(ob).z_trim_ann.reshape(-1), hist=False, kde=True)
+                plt.axvline(eval(ob).z[steady_state], color='k', linestyle='dashed', linewidth=1)
+                plt.axvline(eval(ob).z[eval(ob).crisis_z], color='b', linewidth=3)
+                fig = svm.get_figure()
+                fig.savefig('../output/plots/' + str(ob) + 'distribution_seaborn.png')
+                plt.close(fig)
             
+            fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.hist(eval(ob).z_trim_ann.reshape(-1), bins=100)
-            ax.axvline(eval(ob).z_trim_ann.reshape(-1).mean(), color='k', linestyle='dashed', linewidth=1)
+            ax.axvline(eval(ob).z[steady_state], color='k', linestyle='dashed', linewidth=1)
             ax.axvline(eval(ob).z[eval(ob).crisis_z], color='b', linewidth=3)
             #ax.set_title('Wealth share of experts: stationary distribution', fontsize = 20)
             ax.set_xlabel('Wealth share', fontsize = 15)
+            ax.grid('False')
+            plt.grid('False')
+            ax.set_xticks([])
+            ax.set_yticks([])
             fig.tight_layout()
             plt.gca().axes.get_yaxis().set_visible(False)
             fig.savefig('../output/plots/' + str(ob) + '_distribution.png')

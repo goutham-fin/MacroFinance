@@ -193,8 +193,6 @@ class nnpde_informed():
 
 
 
-
-
 class model_nnpde():
     def __init__(self,params):
         self.params = params
@@ -339,8 +337,8 @@ class model_nnpde():
             self.dLogJe_f = np.hstack([((self.logValueE[:,1]-self.logValueE[:,0])/(self.f_mat[:,1]-self.f_mat[:,0])).reshape(self.Nz,-1),(self.logValueE[:,2:]-self.logValueE[:,0:-2])/(self.f_mat[:,2:]-self.f_mat[:,0:-2]),((self.logValueE[:,-1]-self.logValueE[:,-2])/(self.f_mat[:,-1]-self.f_mat[:,-2])).reshape(self.Nz,1)]);
             self.dLogJh_f = np.hstack([((self.logValueH[:,1]-self.logValueH[:,0])/(self.f_mat[:,1]-self.f_mat[:,0])).reshape(self.Nz,1),(self.logValueH[:,2:]-self.logValueH[:,0:-2])/(self.f_mat[:,2:]-self.f_mat[:,0:-2]),((self.logValueH[:,-1]-self.logValueH[:,-2])/(self.f_mat[:,-1]-self.f_mat[:,-2])).reshape(self.Nz,1)]);
             if self.params['scale']>1:
-                self.Jtilde_z = (1-self.params['gamma'])*self.dLogJh_z - (1-self.params['gamma'])*self.dLogJe_z + 1/(self.z_mat*(1-self.z_mat))
-                self.Jtilde_f = (1-self.params['gamma'])*self.dLogJh_f - (1-self.params['gamma'])*self.dLogJe_f
+                self.Jtilde_z = (1-self.params['gamma'])*(self.dLogJh_z - self.dLogJe_z) + 1/(self.z_mat*(1-self.z_mat))
+                self.Jtilde_f = (1-self.params['gamma'])*(self.dLogJh_f - self.dLogJe_f)
             else:
                 self.Jtilde_z = self.dLogJh_z - self.dLogJe_z + 1/(self.z_mat*(1-self.z_mat))
                 self.Jtilde_f = self.dLogJh_f - self.dLogJe_f
@@ -612,7 +610,7 @@ class model_nnpde():
                 print('Iteration number and Absolute max of relative error: ',self.Iter,',',self.amax)
                 self.amax_vec.append(self.amax)
                 if self.params['write_pickle']==True:
-                    self.pickle_stuff(self,'model2D' + '.pkl')
+                    self.pickle_stuff(self,'model2D' + '.pkl') 
                     
 if __name__ =="__main__":
     params={'rho': 0.05, 'aH': 0.02,

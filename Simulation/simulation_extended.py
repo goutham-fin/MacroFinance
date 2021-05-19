@@ -66,7 +66,7 @@ class simulationExtended():
         self.interp_method = 'bivariate' #interp2d sorts by x and y axis automatically
         
         #modify crisis region
-        self.crisis_flag[:,self.crisis_flag.shape[1]//2:]=0
+        #self.crisis_flag[:,self.crisis_flag.shape[1]//2:]=0
         
     def interpolate_values(self):
         if self.interp_method == 'bivariate':
@@ -111,13 +111,13 @@ class simulationExtended():
         for n in range(self.params['nsim']):  
             for i in range(1, self.t.shape[0]):
                 shock = np.random.normal(0,1)
-                shock2 = np.random.normal(0,1)*np.sqrt(1-self.params['corr']**2)
+                shock2 = np.random.normal(0,1)*np.sqrt(1-self.params['corr']**2) + self.params['corr']*shock
                 self.shock_series[i,n] = shock
                 self.shock2_series[i,n] = shock2
                 self.points = np.array((self.z_sim[i-1],self.f_sim[i-1]))
-                self.z_sim[i,n] = self.z_sim[i-1,n] + self.mu_z_fn(self.z_sim[i-1,n],self.f_sim[i-1,n])*self.dt + (self.sig_zk_fn(self.z_sim[i-1,n],self.f_sim[i-1,n]) + self.sig_zf_fn(self.z_sim[i-1,n],self.f_sim[i-1,n])) *shock *np.sqrt(self.dt)
+                self.z_sim[i,n] = self.z_sim[i-1,n] + self.mu_z_fn(self.z_sim[i-1,n],self.f_sim[i-1,n])*self.dt + self.sig_zk_fn(self.z_sim[i-1,n],self.f_sim[i-1,n])*shock*np.sqrt(self.dt) + self.sig_zf_fn(self.z_sim[i-1,n],self.f_sim[i-1,n]) *shock2 *np.sqrt(self.dt)
                 #below is OU process with stochastic volatility
-                self.f_sim[i,n] = self.f_sim[i-1,n] + self.ex.params['pi']* (self.ex.params['f_avg']-   self.f_sim[i-1,n] ) *self.dt + self.beta_f * (self.ex.params['f_u'] - self.f_sim[i-1,n]) * (self.f_sim[i-1,n] - self.ex.params['f_l'])  * shock * np.sqrt(self.dt)
+                self.f_sim[i,n] = self.f_sim[i-1,n] + self.ex.params['pi']* (self.ex.params['f_avg']-   self.f_sim[i-1,n] ) *self.dt + self.beta_f * (self.ex.params['f_u'] - self.f_sim[i-1,n]) * (self.f_sim[i-1,n] - self.ex.params['f_l'])  * shock2 * np.sqrt(self.dt)
                 self.k_sim[i,n] = self.k_sim[i-1,n] + self.k_sim[i-1,n]*(self.Phi_fn(self.z_sim[i,n], self.f_sim[i,n]) - self.params['delta']) * self.dt + self.k_sim[i-1,n] * self.params['sigma'] * shock * np.sqrt(self.dt)
                    
                 if self.z_sim[i,n] < 0.001: #handle reflecting boundaries
@@ -330,7 +330,7 @@ if __name__ == '__main__':
     params['load_pickle'] = True
     params['write_pickle'] = False
     params['scale'] = 2
-    params['nsim'] = 30
+    params['nsim'] = 1000
     sim_ex = simulationExtended(params)
     sim_ex.simulate()
     sim_ex.compute_statistics()
@@ -346,18 +346,19 @@ if __name__ == '__main__':
             print('Warning: Cannot create directory')
         
         plt.figure()
-        plt.hist(sim_ex.z_trim_ann.reshape(-1),bins=100, density=True);
+        plt.hist(sim_ex.z_trim_ann.reshape(-1),bins=100, density=False);
         plt.grid(False)
         plt.xlabel('Wealth share',fontsize=15)
+        plt.yticks([])
         plt.savefig('../output/plots/sim_z.png')
         
         plt.figure()
         plt.hist(sim_ex.crisis_z,bins=100,density=True);
         plt.grid(False)
         #plt.title('Extended model')
-        plt.xlabel('Wealth share')
+        plt.xlabel('Wealth share',fontsize=15)
+        plt.yticks([])
         plt.savefig('../output/plots/crisis_z_extended.png')
-        
         
         plt.figure()
         plt.hist2d(sim_ex.crisis_z,sim_ex.crisis_f);

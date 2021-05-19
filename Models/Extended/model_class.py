@@ -25,7 +25,7 @@ class model_nnpde():
     def __init__(self,params):
         self.params = params
         self.Nz = 1000
-        self.Nf = 30
+        self.Nf = 50
         self.z = np.linspace(0.001,0.999, self.Nz)
         #self.z = 3*zz**2  - 2*zz**3; 
         self.dz  = self.z[1:self.Nz] - self.z[0:self.Nz-1];  
@@ -109,7 +109,9 @@ class model_nnpde():
         return EN
     def equations_region2(self,q_p,sig_qk_p,sig_qf_p,Chi_p_old,zi,fi):
         error = 100
+        iter_=0; maxIter=200;
         while error>0.00001: 
+            iter_+=1
             i_p = (q_p-1)/self.params['kappa']
             eq1 = self.params['rho'] * q_p  - (self.f[fi] - i_p)
             eq2 = sig_qk_p - sig_qk_p*(Chi_p_old-self.z_mat[zi,fi])/self.dz[zi-1] + (sig_qk_p)*self.q[zi-1,fi]/(q_p*self.dz[zi-1])*(Chi_p_old - self.z_mat[zi,fi]) - self.params['sigma']
@@ -137,6 +139,7 @@ class model_nnpde():
                 Chi_p = self.params['alpha']
                 break
             else: Chi_p_old = Chi_p.copy()
+            if iter_>maxIter: break
             #print(error,Chi_p_old,Chi_p)
             del ER,QN
         if Chi_p <= self.params['alpha']: Chi_p = self.params['alpha']
@@ -165,8 +168,8 @@ class model_nnpde():
             self.dLogJe_f = np.hstack([((self.logValueE[:,1]-self.logValueE[:,0])/(self.f_mat[:,1]-self.f_mat[:,0])).reshape(self.Nz,-1),(self.logValueE[:,2:]-self.logValueE[:,0:-2])/(self.f_mat[:,2:]-self.f_mat[:,0:-2]),((self.logValueE[:,-1]-self.logValueE[:,-2])/(self.f_mat[:,-1]-self.f_mat[:,-2])).reshape(self.Nz,1)]);
             self.dLogJh_f = np.hstack([((self.logValueH[:,1]-self.logValueH[:,0])/(self.f_mat[:,1]-self.f_mat[:,0])).reshape(self.Nz,1),(self.logValueH[:,2:]-self.logValueH[:,0:-2])/(self.f_mat[:,2:]-self.f_mat[:,0:-2]),((self.logValueH[:,-1]-self.logValueH[:,-2])/(self.f_mat[:,-1]-self.f_mat[:,-2])).reshape(self.Nz,1)]);
             if self.params['scale']>1:
-                self.Jtilde_z = (1-self.params['gamma'])*self.dLogJh_z - (1-self.params['gamma'])*self.dLogJe_z + 1/(self.z_mat*(1-self.z_mat))
-                self.Jtilde_f = (1-self.params['gamma'])*self.dLogJh_f - (1-self.params['gamma'])*self.dLogJe_f
+                self.Jtilde_z = (1-self.params['gamma'])*(self.dLogJh_z - self.dLogJe_z) + 1/(self.z_mat*(1-self.z_mat))
+                self.Jtilde_f = (1-self.params['gamma'])*(self.dLogJh_f - self.dLogJe_f)
             else:
                 self.Jtilde_z = self.dLogJh_z - self.dLogJe_z + 1/(self.z_mat*(1-self.z_mat))
                 self.Jtilde_f = self.dLogJh_f - self.dLogJe_f
@@ -448,27 +451,27 @@ class model_nnpde():
         except:
             print('Warning: Cannot create directory for plots')
             return
-        plot_path = '../output/plots/extended/'
+        plot_path = '../output/extended/'
         index1 = np.where(self.f==min(self.f, key=lambda x:abs(x-self.params['f_l'])))[0][0]
         index2=  np.where(self.f==min(self.f, key=lambda x:abs(x-(self.params['f_l']+self.params['f_u'])/2)))[0][0]
         index3 = np.where(self.f==min(self.f, key=lambda x:abs(x-self.params['f_u'])))[0][0]
         
         vars = ['self.q','self.theta','self.thetah','self.psi','self.ssq','self.ssf','self.mu_z','self.sig_zk','self.sig_zf','self.priceOfRiskE_k','self.priceOfRiskE_f','self.priceOfRiskH_k','self.priceOfRiskH_f','self.rp','self.vol']
-        labels = ['q','$\theta_{e}$','$\theta_{h}$','$\psi$','$\sigma + \sigma^{q,k}$','\sigma^{q,a}', '$\mu^z$','$\sigma^{z,k}$','$\sigma^{z,f}$','$\zeta_{e}^k$', '$\zeta_{e}^f$','$\zeta_{h}^k$','$\zeta_{h}^f$','$\mu_e^R -r$','$\norm{\sigma^R}$']
+        labels = ['q','$\theta_{e}$','$\theta_{h}$','$\psi$','$\sigma + \sigma^{q,k}$','\sigma^{q,a}', '$\mu^z$','$\sigma^{z,k}$','$\sigma^{z,f}$','$\zeta_{e}^k$', '$\zeta_{e}^f$','$\zeta_{h}^k$','$\zeta_{h}^f$','$\epsilon_e$','$\norm{\sigma^R}$']
         title = ['Price','Portfolio Choice: Experts', 'Portfolio Choice: Households',\
                      'Capital Share: Experts', 'Price return diffusion (capital shock)','Price return diffusion (productivity shock)','Drift of wealth share: Experts',\
                      'Diffusion of wealth share (capital shock)','Diffusion of wealth share (productivity shock)', 'Experts price of risk: capital shock','Experts price of risk: productivity shock',\
-                     'Household price of risk: capital shock','Household price of risk: productivity shock','Risk premium']
+                     'Household price of risk: capital shock','Household price of risk: productivity shock','Risk premium','Return volatility']
         
         for i in range(len(vars)):
-            plt.plot(self.z[1:],eval(vars[i])[1:,index1],label=r'$a_e$={i}'.format(i=str(round(self.f[int(index1)],2))))
-            plt.plot(self.z[1:],eval(vars[i])[1:,int(index2)],label='$a_e$={i}'.format(i= str(round(self.f[int(index2)]))))
-            plt.plot(self.z[1:],eval(vars[i])[1:,int(index3)],label='$a_e$={i}'.format(i= str(round(self.f[int(index3)],2))),color='b') 
+            plt.plot(self.z[3:],eval(vars[i])[3:,index1],label=r'$a_e$={i}'.format(i=str(round(self.f[int(index1)],2))))
+            plt.plot(self.z[3:],eval(vars[i])[3:,int(index2)],label='$a_e$={i}'.format(i= str(round(self.f[int(index2)],2))))
+            plt.plot(self.z[3:],eval(vars[i])[3:,int(index3)],label='$a_e$={i}'.format(i= str(round(self.f[int(index3)],2))),color='b') 
             plt.grid(True)
             plt.legend(loc=0)
             #plt.axis('tight')
             plt.xlabel('Wealth share (z)')
-            plt.ylabel(labels[i])
+            #plt.ylabel(labels[i])
             plt.title(title[i],fontsize = 20)
             plt.rc('legend', fontsize=15) 
             plt.rc('axes',labelsize = 15)
@@ -478,34 +481,35 @@ class model_nnpde():
             
     def surf_plot_(self, var):
         try:
-            if not os.path.exists('../../output/extended'):
-                os.mkdir('../../output/extended')
+            if not os.path.exists('../output/extended'):
+                os.mkdir('../output/extended')
         except:
             print('Warning: Cannot create directory for plots')
             return
-        plot_path = '../../output/extended/'
-        vars = ['self.q','self.theta','self.thetah','self.psi','self.ssq','self.mu_z','self.sig_za','self.priceOfRiskE','self.priceOfRiskH']
-        labels = ['$q$','$\theta_{e}$','$\theta_{h}$','$\psi$','$\sigma + \sigma^q$','$\mu^z$','$\sigma^z$','$\zeta_{e}$', '$\zeta_{h}$']
+        plot_path = '../output/extended/'
+        vars = ['self.q','self.theta','self.thetah','self.psi','self.ssq','self.mu_z','self.sig_zk','self.sig_zf','self.rp','self.rp_']
+        labels = ['$q$','$\theta_{e}$','$\theta_{h}$','$\psi$','$\sigma + \sigma^q$','$\mu^z$','$\sigma^{zk}$','$\sigma^{za}$','$\epsilon_{e}$', '$\epsilon_{h}$']
         title = ['Price','Portfolio Choice: Experts', 'Portfolio Choice: Households',\
-                     'Capital Share: Experts', 'Return volatility','Drift of wealth share: Experts',\
-                     'Volatility of wealth share: Experts', 'Market price of risk: Experts',\
-                     'Market price of risk: Households']
+                     'Capital Share: Experts', 'Return volatility (capital shock)','Drift of wealth share: Experts',\
+                     'Volatility of wealth share (capital shock)','Volatility of wealth share (productivity shock)', 'Risk premium: Experts',\
+                     'Risk premium: Households']
         
-        y= self.z
+        y= self.z[3:]
         x= self.f
         X,Y = np.meshgrid(x,y)
         for i in range(len(vars)):
             fig = plt.figure()
             ax = fig.gca(projection='3d')
-            Z= eval(vars[i])
+            Z= eval(vars[i])[3:,]
             my_col = cm.jet(Z/np.amax(Z))
             surf = ax.plot_surface(X, Y, Z, facecolors = my_col)
             ax.tick_params(axis='both', which='major', pad=2)
-            rcParams['axes.labelpad'] = 10.0
+            #rcParams['axes.labelpad'] = 10.0
             ax.set_xlabel('Productivity')
             ax.set_ylabel('Wealth share')
-            ax.set_zlabel(labels[i])
-            ax.view_init(30, -30)
+            #ax.set_zlabel(labels[i])
+            if vars[i]=='self.mu_z': ax.view_init(10,-20)
+            else: ax.view_init(30, -30)
             plt.title(title[i])
             plt.savefig(plot_path + str(vars[i]).replace('self.','') + '_extended_3d.png')
             
@@ -520,9 +524,10 @@ if __name__ =="__main__":
     params['write_pickle']=True
     params['active']='on'
     ext = model_nnpde(params)
-    #ext.maxIterations=5
+    #ext.maxIterations=1
     ext.solve(pde='True')  
     ext.plots_()
+    ext.surf_plot_('dummy')
     if True: #diagnosis
         def pickle_stuff(object_name,filename):
             with open(filename,'wb') as f:

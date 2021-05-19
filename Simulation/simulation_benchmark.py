@@ -376,9 +376,9 @@ class simulation_model():
 ###########################################################################################
 if __name__ == '__main__':
     params={'rhoE': 0.06, 'rhoH': 0.04, 'aE': 0.11, 'aH': 0.03,
-            'alpha':0.8, 'kappa':10, 'delta':0.02, 'zbar':0.1, 
-            'lambda_d':0.03, 'sigma':0.06, 'gammaE':5, 'gammaH':5}
-    params['IES']=1.0; params['utility'] = 'recursive'; params['nsim']=3
+            'alpha':0.5, 'kappa':10, 'delta':0.02, 'zbar':0.1, 
+            'lambda_d':0.03, 'sigma':0.06, 'gammaE':1, 'gammaH':1}
+    params['IES']=1.0; params['utility'] = 'recursive'; params['nsim']=1000
     params['load']=False
     params['scale']=2
     params['pickle_name']='model1D'
@@ -395,8 +395,10 @@ if __name__ == '__main__':
     
     plt.hist(sim1.crisis_z_freq,bins=100,density=True)
     plt.grid(False)
-    plt.title('Crisis region')
-    plt.xlabel('Wealth share')
+    #plt.title('Crisis region')
+    plt.yticks([])
+    plt.xlabel('Wealth share',fontsize=15)
+    plt.savefig('../output/plots/crisis_z.png')
     
     
     

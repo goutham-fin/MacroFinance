@@ -251,9 +251,9 @@ class  model():
             self.iota = (self.q - 1)/self.params['kappa'] 
             self.Phi = (np.log(self.q))/self.params['kappa']
             self.theta = (self.chi*self.psi)/self.z_mat
-            self.thetah = (1-(self.chi*self.psi))/(1-self.z_mat)
+            self.thetah = (1-self.chi*self.psi)/(1-self.z_mat)
             self.theta[0,:] = self.theta[1,:]
-                
+            
             self.sig_za =  self.z_mat * (self.theta-1) * self.ssq
             
 
